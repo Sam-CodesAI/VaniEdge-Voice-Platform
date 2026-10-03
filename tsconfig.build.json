@@ -8,5 +8,5 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests", "app", "components"]
+  "exclude": ["node_modules", "dist", "app", "components"]
 }

@@ -28,9 +28,4 @@ export interface Env {
 
   // Environment & Security
   ENVIRONMENT?: string;
-  ALLOW_AUTH_BYPASS?: string;
-  BYPASS_SECRET?: string;
-
-  // Mock / Simulation mode flag for automated test suites
-  MOCK_ELEVENLABS?: string;
 }

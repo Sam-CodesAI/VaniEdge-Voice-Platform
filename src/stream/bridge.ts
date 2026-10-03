@@ -23,7 +23,6 @@ export interface StreamBridgeOptions {
   clientWebSocket: WebSocket;
   env: Env;
   requestUrl: URL;
-  mockUpstreamWs?: WebSocket;
   twilioClient?: TwilioClient;
   caller?: string;
 }
@@ -33,7 +32,6 @@ export class StreamBridge {
   private upstreamWs: WebSocket | null = null;
   private env: Env;
   private requestUrl: URL;
-  private mockUpstreamWs?: WebSocket;
 
   private callSid: string | null = null;
   private streamSid: string | null = null;
@@ -47,7 +45,6 @@ export class StreamBridge {
     this.clientWs = options.clientWebSocket;
     this.env = options.env;
     this.requestUrl = options.requestUrl;
-    this.mockUpstreamWs = options.mockUpstreamWs;
     this.caller = options.caller || null;
 
     this.twilioClient =
@@ -201,12 +198,6 @@ export class StreamBridge {
    */
   private connectUpstream(): void {
     const handshakeStart = performance.now();
-
-    if (this.mockUpstreamWs) {
-      this.upstreamWs = this.mockUpstreamWs;
-      this.setupUpstreamListeners(handshakeStart);
-      return;
-    }
 
     const agentId = this.env.ELEVENLABS_AGENT_ID || 'default_agent';
     const elevenLabsUrl = new URL(`wss://api.elevenlabs.io/v1/convai/conversation`);

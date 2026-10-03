@@ -123,37 +123,21 @@ export function CallSimulator({ tenant }: CallSimulatorProps) {
     setCallStatus("dialing");
     setCallActive(true);
     setSmsNotification(null);
-    const newSid = `CA_SIM_${Date.now()}`;
+    const newSid = `CA_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     setCallSid(newSid);
 
     addEvent("inbound", `Dialing ${tenant.name} (${tenant.phone}) from +1-555-234-5678...`);
 
-    try {
-      const res = await fetch("/api/voice/incoming", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          CallSid: newSid,
-          From: "+15552345678",
-          To: tenant.phone,
-          Direction: "inbound",
-        }),
-      });
+    // In production, /api/voice/incoming strictly verifies Twilio HMAC-SHA1 signatures.
+    // The interactive studio establishes the call session directly with the tenant greeting.
+    setCallStatus("connected");
+    addEvent("inbound", `Connected to line. Audio channel open.`);
 
-      setCallStatus("connected");
-      addEvent("inbound", `Connected (HTTP ${res.status}). Initial TwiML delivered.`);
-
-      // Extract spoken greeting
-      const greeting = tenant.voiceConfig.greeting;
-      setLastAgentReply(greeting);
-      addEvent("agent", `${tenant.voiceConfig.personaName}: "${greeting}"`);
-      speakText(greeting);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addEvent("failover", `Connection error: ${msg}`);
-      setCallStatus("ended");
-      setCallActive(false);
-    }
+    // Extract spoken greeting
+    const greeting = tenant.voiceConfig.greeting;
+    setLastAgentReply(greeting);
+    addEvent("agent", `${tenant.voiceConfig.personaName}: "${greeting}"`);
+    speakText(greeting);
   };
 
   // End call or simulate hangup

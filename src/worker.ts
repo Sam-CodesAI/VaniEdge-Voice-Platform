@@ -38,31 +38,6 @@ const sutraEngine = new SutraHybridEngine([
 
 const ticketDispatcher = new TicketDispatcher();
 
-/**
- * Validates if auth bypass is permitted based on explicit environment configuration
- */
-function isAuthBypassAllowed(request: Request, env: Env): boolean {
-  const bypassHeader = request.headers.get('X-Bypass-Twilio-Auth');
-  if (!bypassHeader) return false;
-
-  // 1. If explicit bypass secret is configured, match it
-  if (env.BYPASS_SECRET) {
-    return bypassHeader === env.BYPASS_SECRET;
-  }
-
-  // 2. Allow in explicit non-production environments
-  const envMode = (env.ENVIRONMENT || '').toLowerCase();
-  if (envMode === 'test' || envMode === 'development') {
-    return bypassHeader === 'true';
-  }
-
-  // 3. Allow if ALLOW_AUTH_BYPASS is explicitly set to 'true'
-  if (env.ALLOW_AUTH_BYPASS === 'true') {
-    return bypassHeader === 'true';
-  }
-
-  return false;
-}
 
 /**
  * Parses request parameters from form-data or JSON
@@ -129,7 +104,6 @@ export default {
               failover_fallback: 'POST /voice/fallback',
               health: 'GET /health',
               metrics: 'GET /metrics',
-              simulate: 'POST /simulate/failover',
             },
             failover_sla: {
               connect_deadline_ms: env.FAILOVER_CONNECT_TIMEOUT_MS || '1200',
@@ -218,11 +192,12 @@ export default {
       const params = await parseParams(request);
       const payload = params as unknown as TwilioVoiceWebhookPayload;
 
-      // Validate Twilio HMAC-SHA1 Signature if enabled
+      // Validate Twilio HMAC-SHA1 Signature strictly in production
       const signatureHeader = request.headers.get('X-Twilio-Signature');
-      const bypassAuth = isAuthBypassAllowed(request, env);
-
-      if (!bypassAuth && env.TWILIO_AUTH_TOKEN && signatureHeader) {
+      if (env.TWILIO_AUTH_TOKEN) {
+        if (!signatureHeader) {
+          return new Response('Unauthorized: Missing Twilio Signature', { status: 401 });
+        }
         const isValid = await validateTwilioSignature(
           signatureHeader,
           request.url,
@@ -261,9 +236,10 @@ export default {
     if (pathname === '/voice/status' && method === 'POST') {
       const params = await parseParams(request);
       const signatureHeader = request.headers.get('X-Twilio-Signature');
-      const bypassAuth = isAuthBypassAllowed(request, env);
-
-      if (!bypassAuth && env.TWILIO_AUTH_TOKEN && signatureHeader) {
+      if (env.TWILIO_AUTH_TOKEN) {
+        if (!signatureHeader) {
+          return new Response('Unauthorized: Missing Twilio Signature', { status: 401 });
+        }
         const isValid = await validateTwilioSignature(
           signatureHeader,
           request.url,
@@ -331,9 +307,10 @@ export default {
     if (pathname === '/voice/fallback' && method === 'POST') {
       const params = await parseParams(request);
       const signatureHeader = request.headers.get('X-Twilio-Signature');
-      const bypassAuth = isAuthBypassAllowed(request, env);
-
-      if (!bypassAuth && env.TWILIO_AUTH_TOKEN && signatureHeader) {
+      if (env.TWILIO_AUTH_TOKEN) {
+        if (!signatureHeader) {
+          return new Response('Unauthorized: Missing Twilio Signature', { status: 401 });
+        }
         const isValid = await validateTwilioSignature(
           signatureHeader,
           request.url,
@@ -362,31 +339,6 @@ export default {
           'Content-Type': 'text/xml',
         },
       });
-    }
-
-    // Route: Failover Simulation Test Endpoint
-    if (pathname === '/simulate/failover' && method === 'POST') {
-      const fallbackUrl = new URL('/voice/fallback', url.origin);
-      const twiml = generateFallbackTwiML(env.FALLBACK_HUMAN_NUMBER || '+18005550199', {
-        callerId: env.TWILIO_PHONE_NUMBER,
-      });
-
-      return new Response(
-        JSON.stringify(
-          {
-            status: 'simulation_complete',
-            action: 'call_redirected_to_fallback',
-            redirect_url: fallbackUrl.toString(),
-            generated_twiml: twiml,
-            sla: 'sub-20ms edge execution',
-          },
-          null,
-          2
-        ),
-        {
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
     }
 
     // Route: SutraDB Semantic RAG Search

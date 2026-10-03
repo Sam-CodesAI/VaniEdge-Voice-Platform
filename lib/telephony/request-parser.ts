@@ -1,9 +1,9 @@
 /**
  * VaniEdge-Pro Telephony Platform
- * Universal Request Body Parser
+ * Universal Production Request Body Parser
  * 
  * Safely extracts parameters from urlencoded forms (Twilio),
- * multipart form-data (testing frameworks), and JSON payloads (Simulator).
+ * multipart form-data, and JSON payloads with graceful fallbacks.
  */
 
 import { NextRequest } from "next/server";

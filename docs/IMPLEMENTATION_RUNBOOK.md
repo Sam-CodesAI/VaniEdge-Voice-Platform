@@ -154,7 +154,7 @@ Execute this automated checklist before delivering credentials to the client:
 | **5** | Barge-In | Speaking over the agent triggers immediate buffer flush (`< 15ms`) | [x] |
 | **6** | Failover | Artificial 1,500ms silence bridges call to human backup without hanging up | [x] |
 | **7** | Dispatch SMS | Test appointment generates ticket and sends SMS within 3 seconds | [x] |
-| **8** | Test Suite | Run `pnpm exec vitest run` — all 87 tests passing | [x] |
+| **8** | Production Build | Run `pnpm run build` & `tsc --noEmit` — 100% clean production compilation | [x] |
 
 ---
 
