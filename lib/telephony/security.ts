@@ -1,6 +1,6 @@
 /**
  * VaniEdge-Pro Telephony Platform
- * Cryptographic Webhook Security & Signature Verification
+ * Cryptographic Webhook Security & Signature Verification (Production)
  * 
  * Implements strict Twilio HMAC-SHA1 verification and timing-safe comparisons
  * with zero external dependencies (Node.js native `crypto`).
@@ -11,7 +11,6 @@ import crypto from "crypto";
 export interface SignatureValidationResult {
   valid: boolean;
   reason?: string;
-  isSimulated?: boolean;
 }
 
 /**
@@ -29,22 +28,9 @@ export function validateTwilioSignature(params: {
   body: Record<string, string>;
   signature: string | null;
   authToken?: string;
-  allowSimulated?: boolean;
 }): SignatureValidationResult {
-  const { url, body, signature, allowSimulated = true } = params;
+  const { url, body, signature } = params;
   const token = params.authToken || process.env.TWILIO_AUTH_TOKEN;
-
-  // 1. Check for authorized simulator bypass (dev environment or admin secret)
-  const isDev = process.env.NODE_ENV !== "production";
-  if (allowSimulated && (isDev || !token)) {
-    if (!signature || signature === "simulated-test-signature") {
-      return {
-        valid: true,
-        isSimulated: true,
-        reason: "Simulated signature accepted under development/test policy.",
-      };
-    }
-  }
 
   if (!token) {
     return {
@@ -61,22 +47,22 @@ export function validateTwilioSignature(params: {
   }
 
   try {
-    // 2. Sort keys alphabetically
+    // 1. Sort keys alphabetically
     const sortedKeys = Object.keys(body).sort();
 
-    // 3. Concatenate key + value
+    // 2. Concatenate key + value
     let dataToSign = url;
     for (const key of sortedKeys) {
       dataToSign += key + (body[key] ?? "");
     }
 
-    // 4. Compute HMAC-SHA1
+    // 3. Compute HMAC-SHA1
     const expectedSignature = crypto
       .createHmac("sha1", token)
       .update(dataToSign, "utf-8")
       .digest("base64");
 
-    // 5. Timing-safe comparison
+    // 4. Timing-safe comparison
     const sigBuffer = Buffer.from(signature, "utf-8");
     const expectedBuffer = Buffer.from(expectedSignature, "utf-8");
 
@@ -106,7 +92,7 @@ export function validateTwilioSignature(params: {
 }
 
 /**
- * Helper to compute an authentic signature (for automated testing & simulation).
+ * Helper to compute an authentic Twilio signature.
  */
 export function computeTwilioSignature(
   url: string,

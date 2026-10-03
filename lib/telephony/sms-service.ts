@@ -1,8 +1,8 @@
 /**
  * VaniEdge-Pro Telephony Platform
- * Idempotent SMS & Omnichannel Dispatcher
+ * Idempotent SMS & Omnichannel Dispatcher (Production)
  * 
- * Sends Twilio SMS with strict 1-hour cooldown deduplication per recipient,
+ * Sends real Twilio SMS with strict 1-hour cooldown deduplication per recipient,
  * ensuring callers are never spammed during failover cascades.
  */
 
@@ -21,7 +21,6 @@ export interface SmsSendParams {
 export interface SmsSendResult {
   success: boolean;
   messageSid?: string;
-  isSimulated?: boolean;
   reason?: string;
 }
 
@@ -47,7 +46,7 @@ export function isRecipientOnCooldown(toPhone: string): boolean {
 }
 
 /**
- * Dispatches an SMS rescue message via Twilio REST API.
+ * Dispatches an SMS rescue message via real Twilio REST API.
  */
 export async function sendSmsRescue(params: SmsSendParams): Promise<SmsSendResult> {
   const { toPhone, fromPhone, message, forceBypassCooldown = false } = params;
@@ -66,15 +65,13 @@ export async function sendSmsRescue(params: SmsSendParams): Promise<SmsSendResul
   const defaultFrom = process.env.TWILIO_PHONE_NUMBER || "+18149613703";
   const senderNumber = fromPhone ? normalizePhone(fromPhone) : defaultFrom;
 
-  // 2. Dev / Simulated Bypass (or +1-555 fictional test numbers)
-  const isFictionalTestNumber = normalizedTo.startsWith("+1555") || normalizedTo.startsWith("1555");
-  if (!accountSid || !authToken || accountSid.includes("your-twilio") || isFictionalTestNumber) {
-    console.log(`[SMS Simulator] To: ${normalizedTo} | From: ${senderNumber} | Text: "${message}"`);
-    SMS_COOLDOWN_CACHE.set(normalizedTo, Date.now());
+  // 2. Strict Production Credentials Validation
+  if (!accountSid || !authToken) {
+    const errorMsg = "TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN is not configured";
+    console.error(`[SMS Service] ${errorMsg}`);
     return {
-      success: true,
-      messageSid: `SM_SIMULATED_${Date.now()}`,
-      isSimulated: true,
+      success: false,
+      reason: errorMsg,
     };
   }
 
@@ -115,7 +112,7 @@ export async function sendSmsRescue(params: SmsSendParams): Promise<SmsSendResul
 
     // Record cooldown
     SMS_COOLDOWN_CACHE.set(normalizedTo, Date.now());
-    console.log(`[SMS Service] Dispatched SMS rescue to ${normalizedTo} (SID: ${sid})`);
+    console.log(`[SMS Service] Dispatched production SMS rescue to ${normalizedTo} (SID: ${sid})`);
 
     return {
       success: true,
@@ -128,16 +125,5 @@ export async function sendSmsRescue(params: SmsSendParams): Promise<SmsSendResul
       success: false,
       reason: errorMsg,
     };
-  }
-}
-
-/**
- * Clear cooldown for testing purposes.
- */
-export function resetCooldownForTesting(toPhone?: string): void {
-  if (toPhone) {
-    SMS_COOLDOWN_CACHE.delete(normalizePhone(toPhone));
-  } else {
-    SMS_COOLDOWN_CACHE.clear();
   }
 }

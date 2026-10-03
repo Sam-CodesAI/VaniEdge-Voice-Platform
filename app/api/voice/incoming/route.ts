@@ -24,9 +24,9 @@ export async function POST(req: NextRequest) {
 
     // 2. Validate payload schema
     const parsedPayload = TwilioVoiceWebhookSchema.safeParse(bodyParams);
-    const callSid = parsedPayload.success ? parsedPayload.data.CallSid : `CA_SIM_${Date.now()}`;
-    const dialedNumber = parsedPayload.success ? parsedPayload.data.To : "";
-    const callerNumber = parsedPayload.success ? parsedPayload.data.From : "";
+    const callSid = parsedPayload.success ? parsedPayload.data.CallSid : (bodyParams.CallSid || "");
+    const dialedNumber = parsedPayload.success ? parsedPayload.data.To : (bodyParams.To || "");
+    const callerNumber = parsedPayload.success ? parsedPayload.data.From : (bodyParams.From || "");
 
     // 3. Validate Twilio cryptographic signature
     const signature = req.headers.get("x-twilio-signature");
@@ -34,7 +34,6 @@ export async function POST(req: NextRequest) {
       url: req.url,
       body: bodyParams,
       signature,
-      allowSimulated: true,
     });
 
     if (!sigCheck.valid) {

@@ -228,7 +228,7 @@ export class StreamBridge {
 
     try {
       const headers: Record<string, string> = {};
-      if (this.env.ELEVENLABS_API_KEY && this.env.ELEVENLABS_API_KEY !== 'mock_or_provided_key') {
+      if (this.env.ELEVENLABS_API_KEY) {
         headers['xi-api-key'] = this.env.ELEVENLABS_API_KEY;
       }
 

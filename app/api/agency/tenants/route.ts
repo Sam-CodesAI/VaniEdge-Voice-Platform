@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       id: newId,
       name: name || "New Client",
       category: category || "general",
-      twilioSid: twilioSid || "AC_mock_sid",
+      twilioSid: twilioSid || process.env.TWILIO_ACCOUNT_SID || "",
       twilioPhone: phone,
       webhookUrl: `https://vaniedge.vercel.app/api/webhooks/${newId}`,
       monthlyCalls: 0,
