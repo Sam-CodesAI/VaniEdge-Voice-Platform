@@ -85,6 +85,125 @@ export function WebRtcVoiceTester({ tenant }: WebRtcVoiceTesterProps) {
     }
   }, []);
 
+  // Real-time Audio Waveform Canvas Animation
+  const drawWaveform = useCallback(() => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    const bufferLength = analyserRef.current?.frequencyBinCount || 64;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const render = () => {
+      // 1. Microphone Live Stream
+      if (analyserRef.current && !isSpeakingRef.current && !isThinking) {
+        analyserRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / bufferLength;
+        setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+      } else if (isSpeakingRef.current) {
+        // 2. Synthesize Dynamic Harmonic Waveform when AI Agent is Speaking
+        const time = performance.now() * 0.008;
+        for (let i = 0; i < bufferLength; i++) {
+          const wave1 = Math.sin(time * 2.2 + i * 0.35) * 0.5 + 0.5;
+          const wave2 = Math.cos(time * 3.7 - i * 0.25) * 0.3 + 0.3;
+          const amp = (wave1 + wave2) * 170;
+          dataArray[i] = Math.min(255, Math.floor(amp));
+        }
+        setAudioLevel(Math.floor(45 + Math.sin(time * 2.5) * 35));
+      } else if (isThinking) {
+        // 3. Subtle traveling pulse during reasoning
+        const time = performance.now() * 0.005;
+        for (let i = 0; i < bufferLength; i++) {
+          const wave = Math.sin(time * 3 + i * 0.5) * 0.5 + 0.5;
+          dataArray[i] = Math.floor(wave * 90);
+        }
+        setAudioLevel(20);
+      } else {
+        // 4. Ambient idle state
+        for (let i = 0; i < bufferLength; i++) {
+          dataArray[i] = 12;
+        }
+        setAudioLevel(0);
+      }
+
+      // Canvas dimensions
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw subtle background grid line
+      ctx.strokeStyle = "rgba(30, 41, 59, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+
+      // Dynamic mirrored visualizer bars
+      const barCount = 36;
+      const barWidth = (width / barCount) * 0.65;
+      const gap = (width / barCount) * 0.35;
+
+      for (let i = 0; i < barCount; i++) {
+        const binIndex = Math.floor((i / barCount) * (bufferLength / 2));
+        const val = dataArray[binIndex] || 0;
+        const normalized = val / 255;
+        const barHeight = Math.max(4, normalized * (height * 0.75));
+
+        const x = i * (barWidth + gap) + gap / 2;
+        const yTop = height / 2 - barHeight / 2;
+
+        // Gradient coloring based on state
+        const gradient = ctx.createLinearGradient(0, yTop, 0, yTop + barHeight);
+        if (isSpeakingRef.current) {
+          gradient.addColorStop(0, "#a855f7"); // purple
+          gradient.addColorStop(0.5, "#06b6d4"); // cyan
+          gradient.addColorStop(1, "#3b82f6"); // blue
+        } else if (isThinking) {
+          gradient.addColorStop(0, "#f59e0b"); // amber
+          gradient.addColorStop(0.5, "#06b6d4"); // cyan
+          gradient.addColorStop(1, "#6366f1"); // indigo
+        } else if (normalized > 0.15) {
+          gradient.addColorStop(0, "#10b981"); // emerald
+          gradient.addColorStop(0.5, "#06b6d4"); // cyan
+          gradient.addColorStop(1, "#3b82f6"); // blue
+        } else {
+          gradient.addColorStop(0, "#334155");
+          gradient.addColorStop(1, "#1e293b");
+        }
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(x, yTop, barWidth, barHeight, 4);
+        } else {
+          ctx.rect(x, yTop, barWidth, barHeight);
+        }
+        ctx.fill();
+      }
+
+      animationFrameRef.current = requestAnimationFrame(render);
+    };
+
+    render();
+  }, [isThinking]);
+
+  // Mount canvas animation
+  useEffect(() => {
+    drawWaveform();
+  }, [drawWaveform]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -181,15 +300,21 @@ export function WebRtcVoiceTester({ tenant }: WebRtcVoiceTesterProps) {
         let replyText = "";
         let isEmergencyTransfer = false;
 
+        const sayMatches = [...xml.matchAll(/<Say[^>]*>([\s\S]*?)<\/Say>/gi)]
+          .map((m) => m[1].trim())
+          .filter(Boolean)
+          .join(" ");
+
         if (xml.includes("<Dial") || xml.includes("whisper")) {
           isEmergencyTransfer = true;
-          replyText = `Urgent safety condition detected. Initiating immediate warm transfer to our on-call technician at ${tenant.emergencyNumbers.onCallTechnician}. Please hold.`;
+          replyText =
+            sayMatches ||
+            `Urgent safety condition detected. Initiating immediate warm transfer to our on-call technician at ${tenant.emergencyNumbers.onCallTechnician}. Please hold.`;
           setTransferAlert(
             `🚨 Tier 3 Warm Transfer Dispatched: Dialing on-call technician (${tenant.emergencyNumbers.onCallTechnician}) with private audio whisper.`
           );
         } else {
-          const match = xml.match(/<Say[^>]*>([\s\S]*?)<\/Say>/);
-          replyText = match ? match[1].trim() : "Thank you for reaching out. How else can I assist you today?";
+          replyText = sayMatches || "Thank you for reaching out. How else can I assist you today?";
         }
 
         const totalLatency = Math.round(performance.now() - startTime);
@@ -314,87 +439,7 @@ export function WebRtcVoiceTester({ tenant }: WebRtcVoiceTesterProps) {
     return rec;
   }, [isActive, isThinking, isMuted, processSpokenInput]);
 
-  // Real-time Audio Waveform Canvas Animation
-  const drawWaveform = useCallback(() => {
-    if (!analyserRef.current || !canvasRef.current) return;
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const analyser = analyserRef.current;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const render = () => {
-      analyser.getByteFrequencyData(dataArray);
-
-      // Compute RMS volume
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
-      }
-      const avg = sum / bufferLength;
-      setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
-
-      // Canvas dimensions
-      const width = canvas.width;
-      const height = canvas.height;
-      ctx.clearRect(0, 0, width, height);
-
-      // Draw subtle background grid line
-      ctx.strokeStyle = "rgba(30, 41, 59, 0.4)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, height / 2);
-      ctx.lineTo(width, height / 2);
-      ctx.stroke();
-
-      // Dynamic mirrored visualizer bars
-      const barCount = 36;
-      const barWidth = (width / barCount) * 0.65;
-      const gap = (width / barCount) * 0.35;
-
-      for (let i = 0; i < barCount; i++) {
-        const binIndex = Math.floor((i / barCount) * (bufferLength / 2));
-        const val = dataArray[binIndex] || 0;
-        const normalized = val / 255;
-        const barHeight = Math.max(4, normalized * (height * 0.75));
-
-        const x = i * (barWidth + gap) + gap / 2;
-        const yTop = height / 2 - barHeight / 2;
-
-        // Gradient coloring based on state
-        const gradient = ctx.createLinearGradient(0, yTop, 0, yTop + barHeight);
-        if (isSpeakingRef.current) {
-          gradient.addColorStop(0, "#a855f7"); // purple
-          gradient.addColorStop(0.5, "#06b6d4"); // cyan
-          gradient.addColorStop(1, "#3b82f6"); // blue
-        } else if (normalized > 0.15) {
-          gradient.addColorStop(0, "#10b981"); // emerald
-          gradient.addColorStop(0.5, "#06b6d4"); // cyan
-          gradient.addColorStop(1, "#3b82f6"); // blue
-        } else {
-          gradient.addColorStop(0, "#334155");
-          gradient.addColorStop(1, "#1e293b");
-        }
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        // Pill rounded bars
-        if (ctx.roundRect) {
-          ctx.roundRect(x, yTop, barWidth, barHeight, 4);
-        } else {
-          ctx.rect(x, yTop, barWidth, barHeight);
-        }
-        ctx.fill();
-      }
-
-      animationFrameRef.current = requestAnimationFrame(render);
-    };
-
-    render();
-  }, []);
 
   // Start Live Voice Session
   const startVoiceSession = async () => {
@@ -855,6 +900,7 @@ export function WebRtcVoiceTester({ tenant }: WebRtcVoiceTesterProps) {
                       sessionIdRef.current = `WEBRTC_${Date.now()}`;
                       setIsActive(true);
                     }
+                    drawWaveform();
                     processSpokenInput(chip.text);
                   }}
                   className={`p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-left transition-all cursor-pointer text-[11px] leading-tight flex items-start gap-1.5 ${chip.color} disabled:opacity-50`}

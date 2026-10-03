@@ -105,6 +105,31 @@ describe("Telephony v2.0 Enterprise Architecture", () => {
         APEX_HVAC_PROFILE
       );
       expect(nonEmergency2.isEmergency).toBe(false);
+
+      const complexNonEmergency = checkEmergencyTriage(
+        "The heater makes a weird sound, but nobody is hurt and there is no smell of gas",
+        APEX_HVAC_PROFILE
+      );
+      expect(complexNonEmergency.isEmergency).toBe(false);
+
+      const negatedSmellGas = checkEmergencyTriage(
+        "I do not smell gas, just need regular checkup",
+        APEX_HVAC_PROFILE
+      );
+      expect(negatedSmellGas.isEmergency).toBe(false);
+
+      const negatedSmoke = checkEmergencyTriage(
+        "No smoke from furnace, just cold air",
+        APEX_HVAC_PROFILE
+      );
+      expect(negatedSmoke.isEmergency).toBe(false);
+
+      const mixedTriage = checkEmergencyTriage(
+        "No smoke from furnace, but there is a gas leak in my basement!",
+        APEX_HVAC_PROFILE
+      );
+      expect(mixedTriage.isEmergency).toBe(true);
+      expect(mixedTriage.matchedKeyword).toBe("gas leak");
     });
 
     it("triage respects industry specific emergencies (Dental vs HVAC)", () => {
@@ -426,6 +451,50 @@ describe("Telephony v2.0 Enterprise Architecture", () => {
       expect(result.replyText).toContain("Gemini AI response");
     });
 
+    it("parses Gemini JSON cleanly when output is wrapped in markdown code fences", async () => {
+      process.env.GEMINI_API_KEY = "gemini_test_mock_key";
+
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes("generativelanguage.googleapis.com")) {
+          return {
+            ok: true,
+            json: async () => ({
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        text:
+                          "```json\n" +
+                          JSON.stringify({
+                            intent: "pricing_inquiry",
+                            confidence: 0.94,
+                            summary: "Diagnostic pricing inquiry",
+                            emergencyDetected: false,
+                            replyText: "Our standard diagnostic fee is $89.",
+                            action: "gather",
+                          }) +
+                          "\n```",
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      });
+
+      const result = await classifyWithAi({
+        callerSpeech: "What is your callout fee?",
+        tenant: APEX_HVAC_PROFILE,
+      });
+
+      expect(result.intent).toBe("pricing_inquiry");
+      expect(result.replyText).toContain("$89");
+    });
+
     it("defaults to guaranteed zero-failure procedural triage when all AI providers fail", async () => {
       process.env.GROQ_API_KEY = "gsk_test_mock_key";
       process.env.GEMINI_API_KEY = "gemini_test_mock_key";
@@ -441,6 +510,34 @@ describe("Telephony v2.0 Enterprise Architecture", () => {
       expect(result.confidence).toBe(0.6);
       expect(result.action).toBe("gather");
       expect(result.replyText).toBeDefined();
+    });
+  });
+
+  // 7. Route Handlers & WebRTC Tester Direct Invocations
+  describe("Route Handlers & WebRTC Tester Direct Invocations", () => {
+    it("auto-creates session and triggers Tier 3 emergency <Dial> when called directly without incoming session", async () => {
+      const { POST: handleProcess } = await import("../app/api/voice/process/route");
+      const { NextRequest } = await import("next/server");
+
+      const req = new NextRequest(
+        "https://vani-edge.vercel.app/api/voice/process?callSid=WEBRTC_TEST_DIRECT&tenantId=apex-hvac",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            CallSid: "WEBRTC_TEST_DIRECT",
+            SpeechResult: "Help, there is an active gas leak and fire in our basement!",
+          }),
+        }
+      );
+
+      const res = await handleProcess(req);
+      const xml = await res.text();
+
+      expect(res.status).toBe(200);
+      expect(xml).toContain("<Dial");
+      expect(xml).toContain("+13035550101");
+      expect(xml).toContain("whisper");
     });
   });
 });

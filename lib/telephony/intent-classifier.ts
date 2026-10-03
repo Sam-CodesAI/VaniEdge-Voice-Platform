@@ -9,9 +9,12 @@
 import { TenantProfile, IntentResult, IntentType } from "./types";
 import { checkBusinessHours } from "./tenant-store";
 
-// Negation pattern: prevents false positives (e.g., "I don't have a gas leak")
-const NEGATION_PATTERN =
-  /\b(no|not|don't have|dont have|never had|did you fix|already fixed|was the|is the)\s+[\w\s]{0,25}(gas leak|burst pipe|flooding|fire|carbon monoxide|emergency)/i;
+// Words/phrases indicating negation or past resolved state when preceding or following emergency keywords
+const PRECEDING_NEGATION_REGEX =
+  /\b(no|not|don't|dont|never|neither|without|didn't|didnt|did you fix|already fixed|no sign of|no smell of|zero)\b[\w\s]{0,25}$/i;
+
+const FOLLOWING_RESOLVED_REGEX =
+  /^[\w\s]{0,20}\b(fixed|resolved|repaired|cleared|was the|is the|not happening|stopped)\b/i;
 
 const HUMAN_TRANSFER_PATTERNS = [
   /\b(speak to (a |an )?(human|person|agent|representative|operator|technician|dispatcher))\b/i,
@@ -29,21 +32,28 @@ const BOOKING_PATTERNS = [
 ];
 
 /**
- * Fast sub-millisecond regex check for emergency keywords.
+ * Fast sub-millisecond regex check for emergency keywords with per-keyword negation awareness.
  */
 export function checkEmergencyTriage(text: string, tenant: TenantProfile): {
   isEmergency: boolean;
   matchedKeyword?: string;
 } {
-  if (NEGATION_PATTERN.test(text)) {
-    return { isEmergency: false };
-  }
-
   const lower = text.toLowerCase();
+
   for (const kw of tenant.knowledgeBase.emergencyKeywords) {
-    const kwRegex = new RegExp(`\\b${kw}\\b`, "i");
-    if (kwRegex.test(lower)) {
-      return { isEmergency: true, matchedKeyword: kw };
+    const kwRegex = new RegExp(`\\b${kw}\\b`, "gi");
+    let match: RegExpExecArray | null;
+
+    while ((match = kwRegex.exec(lower)) !== null) {
+      const matchIndex = match.index;
+      const preceding = lower.slice(Math.max(0, matchIndex - 45), matchIndex);
+      const following = lower.slice(matchIndex + kw.length, matchIndex + kw.length + 30);
+
+      const isNegated = PRECEDING_NEGATION_REGEX.test(preceding) || FOLLOWING_RESOLVED_REGEX.test(following);
+
+      if (!isNegated) {
+        return { isEmergency: true, matchedKeyword: kw };
+      }
     }
   }
 
@@ -139,6 +149,36 @@ export function classifyProceduralIntent(
 }
 
 /**
+ * Safely parse JSON from LLM output, extracting from markdown code fences or raw objects.
+ */
+function extractJsonFromText(rawText: string): IntentResult | null {
+  try {
+    const cleanText = rawText
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+    const parsed = JSON.parse(cleanText) as IntentResult;
+    if (parsed && typeof parsed === "object" && parsed.intent && parsed.replyText) {
+      return parsed;
+    }
+  } catch {
+    // If strict parse fails, attempt regex extraction for embedded JSON block
+    const jsonMatch = rawText.match(/\{[\s\S]*"intent"[\s\S]*"replyText"[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]) as IntentResult;
+        if (parsed && typeof parsed === "object" && parsed.intent && parsed.replyText) {
+          return parsed;
+        }
+      } catch {
+        // Fall through
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Query Groq chat completions API with JSON object response format.
  */
 async function queryGroqChat(params: {
@@ -177,10 +217,7 @@ async function queryGroqChat(params: {
 
   const content = data.choices?.[0]?.message?.content;
   if (content) {
-    const parsed = JSON.parse(content) as IntentResult;
-    if (parsed.intent && parsed.replyText) {
-      return parsed;
-    }
+    return extractJsonFromText(content);
   }
   return null;
 }
@@ -234,10 +271,7 @@ async function queryGeminiGenerate(params: {
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (text) {
-    const parsed = JSON.parse(text) as IntentResult;
-    if (parsed.intent && parsed.replyText) {
-      return parsed;
-    }
+    return extractJsonFromText(text);
   }
   return null;
 }
@@ -291,10 +325,10 @@ Respond with STRICT JSON format only:
   if (groqKey) {
     const groqModels = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
     for (const model of groqModels) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+      try {
         const result = await queryGroqChat({
           apiKey: groqKey,
           model,
@@ -303,11 +337,12 @@ Respond with STRICT JSON format only:
           signal: controller.signal,
         });
 
-        clearTimeout(timeoutId);
         if (result) return result;
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.warn(`[IntentClassifier] Groq ${model} failed, falling back: ${errorMsg}`);
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
   }
@@ -317,10 +352,10 @@ Respond with STRICT JSON format only:
   if (geminiKey) {
     const geminiModels = ["gemini-2.0-flash", "gemini-1.5-flash"];
     for (const model of geminiModels) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+      try {
         const result = await queryGeminiGenerate({
           apiKey: geminiKey,
           model,
@@ -329,11 +364,12 @@ Respond with STRICT JSON format only:
           signal: controller.signal,
         });
 
-        clearTimeout(timeoutId);
         if (result) return result;
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.warn(`[IntentClassifier] Gemini ${model} failed, falling back: ${errorMsg}`);
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
   }

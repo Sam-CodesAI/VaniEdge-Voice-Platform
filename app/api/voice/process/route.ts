@@ -10,6 +10,7 @@ import { NextRequest } from "next/server";
 import { getTenantById } from "@/lib/telephony/tenant-store";
 import { classifyWithAi } from "@/lib/telephony/intent-classifier";
 import {
+  createCallSession,
   getCallSession,
   appendTranscript,
   executeTier2Fallback,
@@ -36,8 +37,20 @@ export async function POST(req: NextRequest) {
       if (parsed.data.CallSid) callSid = parsed.data.CallSid;
     }
 
+    if (!callSid) {
+      callSid = `CALL_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    }
+
     const tenant = getTenantById(tenantId);
     let session = getCallSession(callSid);
+    if (!session) {
+      session = createCallSession({
+        callSid,
+        tenantId: tenant.id,
+        from: (bodyParams.From as string) || (bodyParams.from as string) || "+10000000000",
+        to: (bodyParams.To as string) || (bodyParams.to as string) || tenant.phone,
+      });
+    }
 
     const speechResult = bodyParams.SpeechResult || bodyParams.speech || "";
     const digits = bodyParams.Digits || bodyParams.digits || "";
@@ -58,10 +71,8 @@ export async function POST(req: NextRequest) {
     }
 
     const userInput = speechResult || `Keypress DTMF: ${digits}`;
-    if (session) {
-      appendTranscript(session, "caller", userInput);
-      transitionCallPhase(session, "processing_ai");
-    }
+    appendTranscript(session, "caller", userInput);
+    transitionCallPhase(session, "processing_ai");
 
     // 2. Classify intent via Hybrid Engine (Regex -> Groq -> Gemini)
     const intentResult = await classifyWithAi({
@@ -71,11 +82,9 @@ export async function POST(req: NextRequest) {
     });
 
     const elapsed = Date.now() - startTime;
-    if (session) {
-      session.latencyMs.total = elapsed;
-      session.intent = intentResult.intent;
-      appendTranscript(session, "agent", intentResult.replyText);
-    }
+    session.latencyMs.total = elapsed;
+    session.intent = intentResult.intent;
+    appendTranscript(session, "agent", intentResult.replyText);
 
     const origin = req.nextUrl.origin;
 
@@ -89,17 +98,15 @@ export async function POST(req: NextRequest) {
         callSid
       )}&tenantId=${encodeURIComponent(tenant.id)}`;
 
-      if (session) {
-        const { twimlResponse } = executeTier3WarmTransfer({
-          session,
-          tenant,
-          whisperUrl,
-          fallbackActionUrl,
-          emergencyReason: intentResult.emergencyKeyword,
-        });
-        await persistSessionToDatabase(session);
-        return twimlResponse;
-      }
+      const { twimlResponse } = executeTier3WarmTransfer({
+        session,
+        tenant,
+        whisperUrl,
+        fallbackActionUrl,
+        emergencyReason: intentResult.emergencyKeyword,
+      });
+      await persistSessionToDatabase(session);
+      return twimlResponse;
     }
 
     // 4. Action Routing: Conversational Dialog with Polly Neural Voice
