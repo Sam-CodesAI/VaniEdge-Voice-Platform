@@ -543,6 +543,13 @@ export default function VaniEdgePage() {
             {/* Desktop Navigation Links */}
             <nav className="hidden lg:flex items-center gap-6 text-xs font-bold font-oswald uppercase text-black">
               <a
+                href="/demos/voice-agent"
+                className="text-cyan-700 hover:text-cyan-900 transition-colors cursor-pointer flex items-center gap-1.5 font-bold"
+              >
+                <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
+                Telephony v2.0
+              </a>
+              <a
                 href="/agency"
                 className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1"
               >
