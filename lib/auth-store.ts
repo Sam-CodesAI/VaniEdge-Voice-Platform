@@ -32,6 +32,16 @@ export interface SessionRecord {
   expiresAt: number;
 }
 
+// Helper to serialize bytes to hex string compatible across Node.js and Cloudflare Workers
+function toHex(buf: unknown): string {
+  const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf as ArrayBuffer);
+  let hex = "";
+  for (let i = 0; i < u8.length; i++) {
+    hex += u8[i].toString(16).padStart(2, "0");
+  }
+  return hex;
+}
+
 // In-memory persistent database for server lifecycle
 class AuthDatabase {
   private users: Map<string, UserRecord> = new Map();
@@ -44,9 +54,9 @@ class AuthDatabase {
   }
 
   private generateCredentials(userId: string, email: string): UserCredentials {
-    const keySuffix = crypto.randomBytes(16).toString("hex");
-    const secretSuffix = crypto.randomBytes(24).toString("hex");
-    const sipPass = crypto.randomBytes(12).toString("hex");
+    const keySuffix = toHex(crypto.randomBytes(16));
+    const secretSuffix = toHex(crypto.randomBytes(24));
+    const sipPass = toHex(crypto.randomBytes(12));
     const shortId = userId.slice(0, 8);
 
     return {
@@ -60,12 +70,12 @@ class AuthDatabase {
   }
 
   private hashPassword(password: string, salt: string): string {
-    return crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex");
+    return toHex(crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512"));
   }
 
   private seedDefaultUsers() {
     // 1. Seed demo developer account
-    const devSalt = crypto.randomBytes(16).toString("hex");
+    const devSalt = toHex(crypto.randomBytes(16));
     const devId = "usr_dev_001";
     const devCredentials = this.generateCredentials(devId, "developer@vaniedge.ai");
     const devUser: UserRecord = {
@@ -89,7 +99,7 @@ class AuthDatabase {
     this.usersByApiKey.set(devCredentials.apiKey, devUser.id);
 
     // 2. Seed enterprise client account
-    const entSalt = crypto.randomBytes(16).toString("hex");
+    const entSalt = toHex(crypto.randomBytes(16));
     const entId = "usr_ent_002";
     const entCredentials = this.generateCredentials(entId, "demo@vaniedge.ai");
     const entUser: UserRecord = {
@@ -125,9 +135,9 @@ class AuthDatabase {
       throw new Error("An account with this email address already exists.");
     }
 
-    const salt = crypto.randomBytes(16).toString("hex");
+    const salt = toHex(crypto.randomBytes(16));
     const passwordHash = password ? this.hashPassword(password, salt) : "";
-    const id = `usr_${crypto.randomBytes(8).toString("hex")}`;
+    const id = `usr_${toHex(crypto.randomBytes(8))}`;
     const credentials = this.generateCredentials(id, normalizedEmail);
 
     const user: UserRecord = {
@@ -180,7 +190,7 @@ class AuthDatabase {
 
 
   public createSession(userId: string): string {
-    const token = `vsk_${crypto.randomBytes(32).toString("hex")}`;
+    const token = `vsk_${toHex(crypto.randomBytes(32))}`;
     const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
     this.sessions.set(token, { token, userId, expiresAt });
     return token;

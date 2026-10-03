@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   computeTwilioSignature,
   validateTwilioSignature,
 } from "../lib/telephony/security";
 import {
   checkEmergencyTriage,
+  classifyWithAi,
 } from "../lib/telephony/intent-classifier";
 import {
   createInboundGreetingTwiML,
@@ -270,6 +271,176 @@ describe("Telephony v2.0 Enterprise Architecture", () => {
       } finally {
         global.fetch = originalFetch;
       }
+    });
+  });
+
+  // 6. Multi-LLM Resilient Intent Classifier (Groq llama-3.3-70b -> llama-3.1-8b -> Gemini Flash -> Procedural)
+  describe("Multi-LLM Resilient Intent Classifier", () => {
+    const originalFetch = global.fetch;
+    const originalGroqKey = process.env.GROQ_API_KEY;
+    const originalGeminiKey = process.env.GEMINI_API_KEY;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+      process.env.GROQ_API_KEY = originalGroqKey;
+      process.env.GEMINI_API_KEY = originalGeminiKey;
+    });
+
+    it("evaluates emergency triage procedurally without invoking network LLMs", async () => {
+      const fetchSpy = vi.fn();
+      global.fetch = fetchSpy;
+
+      const result = await classifyWithAi({
+        callerSpeech: "There is an active gas leak and water pipe explosion!",
+        tenant: APEX_HVAC_PROFILE,
+      });
+
+      expect(result.emergencyDetected).toBe(true);
+      expect(result.intent).toBe("emergency_transfer");
+      expect(result.action).toBe("transfer");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("routes conversational speech through Groq llama-3.3-70b-versatile", async () => {
+      process.env.GROQ_API_KEY = "gsk_test_mock_key";
+
+      let capturedBody: any = null;
+      global.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
+        capturedBody = JSON.parse(opts.body);
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    intent: "routine_inquiry",
+                    confidence: 0.95,
+                    summary: "Caller inquiring about AC duct cleaning",
+                    emergencyDetected: false,
+                    replyText: "We can clean your AC ducts. When would you like us to come by?",
+                    action: "gather",
+                  }),
+                },
+              },
+            ],
+          }),
+        };
+      });
+
+      const result = await classifyWithAi({
+        callerSpeech: "Do you clean AC ducts?",
+        tenant: APEX_HVAC_PROFILE,
+      });
+
+      expect(result.intent).toBe("routine_inquiry");
+      expect(capturedBody.model).toBe("llama-3.3-70b-versatile");
+      expect(result.replyText).toContain("clean your AC ducts");
+    });
+
+    it("fails over to Groq llama-3.1-8b-instant if primary 70b model fails", async () => {
+      process.env.GROQ_API_KEY = "gsk_test_mock_key";
+
+      const calledModels: string[] = [];
+      global.fetch = vi.fn().mockImplementation(async (url: string, opts: any) => {
+        const body = JSON.parse(opts.body);
+        calledModels.push(body.model);
+
+        if (body.model === "llama-3.3-70b-versatile") {
+          return { ok: false, status: 503, text: async () => "Model overloaded" };
+        }
+
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    intent: "pricing_inquiry",
+                    confidence: 0.9,
+                    summary: "Pricing inquiry",
+                    emergencyDetected: false,
+                    replyText: "Our service diagnostic fee is $89.",
+                    action: "gather",
+                  }),
+                },
+              },
+            ],
+          }),
+        };
+      });
+
+      const result = await classifyWithAi({
+        callerSpeech: "I would like to understand variable-speed heat pump SEER2 efficiency ratings",
+        tenant: APEX_HVAC_PROFILE,
+      });
+
+      expect(calledModels).toContain("llama-3.3-70b-versatile");
+      expect(calledModels).toContain("llama-3.1-8b-instant");
+      expect(result.replyText).toBeDefined();
+    });
+
+    it("seamlessly fails over to Google Gemini Flash when Groq is unavailable", async () => {
+      process.env.GROQ_API_KEY = "gsk_test_mock_key";
+      process.env.GEMINI_API_KEY = "gemini_test_mock_key";
+
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes("api.groq.com")) {
+          return { ok: false, status: 429, text: async () => "Rate limit exceeded" };
+        }
+        if (url.includes("generativelanguage.googleapis.com")) {
+          return {
+            ok: true,
+            json: async () => ({
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        text: JSON.stringify({
+                          intent: "routine_inquiry",
+                          confidence: 0.92,
+                          summary: "Gemini rescued conversational query",
+                          emergencyDetected: false,
+                          replyText: "Gemini AI response: We can schedule your consultation.",
+                          action: "gather",
+                        }),
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      });
+
+      const result = await classifyWithAi({
+        callerSpeech: "I would like to speak about a commercial heating system overhaul",
+        tenant: APEX_HVAC_PROFILE,
+      });
+
+      expect(result.intent).toBe("routine_inquiry");
+      expect(result.replyText).toContain("Gemini AI response");
+    });
+
+    it("defaults to guaranteed zero-failure procedural triage when all AI providers fail", async () => {
+      process.env.GROQ_API_KEY = "gsk_test_mock_key";
+      process.env.GEMINI_API_KEY = "gemini_test_mock_key";
+
+      global.fetch = vi.fn().mockRejectedValue(new Error("Network offline"));
+
+      const result = await classifyWithAi({
+        callerSpeech: "Random unclassified conversational query",
+        tenant: APEX_HVAC_PROFILE,
+      });
+
+      expect(result.intent).toBe("routine_inquiry");
+      expect(result.confidence).toBe(0.6);
+      expect(result.action).toBe("gather");
+      expect(result.replyText).toBeDefined();
     });
   });
 });

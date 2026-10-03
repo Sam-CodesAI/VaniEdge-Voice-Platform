@@ -9,6 +9,8 @@
  *   npx tsx --env-file=.env.local scripts/update-twilio-webhook.ts https://your-domain.vercel.app
  */
 
+export {};
+
 const targetBaseUrl = process.argv[2];
 
 if (!targetBaseUrl) {

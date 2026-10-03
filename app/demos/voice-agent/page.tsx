@@ -10,9 +10,12 @@ import {
   Sparkles,
   Bot,
   ExternalLink,
+  Mic,
+  Phone,
 } from "lucide-react";
 import { TelemetryStats } from "@/components/voice/TelemetryStats";
 import { CallSimulator } from "@/components/voice/CallSimulator";
+import { WebRtcVoiceTester } from "@/components/voice/WebRtcVoiceTester";
 import {
   getAllTenants,
   APEX_HVAC_PROFILE,
@@ -24,6 +27,7 @@ import { TenantProfile } from "@/lib/telephony/types";
 
 export default function VoiceAgentMissionControlPage() {
   const [selectedTenant, setSelectedTenant] = useState<TenantProfile>(APEX_HVAC_PROFILE);
+  const [testerMode, setTesterMode] = useState<"webrtc" | "pstn">("webrtc");
   const tenants = getAllTenants();
 
   return (
@@ -123,9 +127,53 @@ export default function VoiceAgentMissionControlPage() {
           </div>
         </div>
 
-        {/* 3. In-Browser Telephony Simulator */}
+        {/* 3. In-Browser Telephony Testing Studio */}
         <div className="mb-10">
-          <CallSimulator tenant={selectedTenant} />
+          {/* Mode Switcher Tabs */}
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="inline-flex p-1 rounded-2xl bg-slate-900 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTesterMode("webrtc")}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                  testerMode === "webrtc"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-lg shadow-cyan-500/10"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5 text-cyan-400" />
+                <span>🎙️ Live Microphone WebRTC Tester</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-500/30 text-cyan-200 font-bold">
+                  NEW
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTesterMode("pstn")}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                  testerMode === "pstn"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-lg shadow-amber-500/10"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Phone className="w-3.5 h-3.5 text-amber-400" />
+                <span>📞 PSTN Phone & DTMF Simulator</span>
+              </button>
+            </div>
+
+            <div className="text-xs font-mono text-slate-500 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Multi-LLM Engine: Groq Llama 3.3 70B & Gemini Flash</span>
+            </div>
+          </div>
+
+          {/* Active Tester Component */}
+          {testerMode === "webrtc" ? (
+            <WebRtcVoiceTester tenant={selectedTenant} />
+          ) : (
+            <CallSimulator tenant={selectedTenant} />
+          )}
         </div>
 
         {/* 4. Architecture & 4-Tier Zero-Drop Protocol Explainer */}

@@ -139,8 +139,115 @@ export function classifyProceduralIntent(
 }
 
 /**
- * AI Intent Classifier via Groq Cloud or Gemini Flash.
- * Dispatched when procedural rules require conversational understanding.
+ * Query Groq chat completions API with JSON object response format.
+ */
+async function queryGroqChat(params: {
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  userSpeech: string;
+  signal: AbortSignal;
+}): Promise<IntentResult | null> {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: params.model,
+      temperature: 0.1,
+      max_tokens: 250,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: params.systemPrompt },
+        { role: "user", content: params.userSpeech },
+      ],
+    }),
+    signal: params.signal,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Groq ${params.model} HTTP ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+
+  const content = data.choices?.[0]?.message?.content;
+  if (content) {
+    const parsed = JSON.parse(content) as IntentResult;
+    if (parsed.intent && parsed.replyText) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+/**
+ * Query Google Gemini Flash generateContent REST API.
+ */
+async function queryGeminiGenerate(params: {
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  userSpeech: string;
+  signal: AbortSignal;
+}): Promise<IntentResult | null> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${params.model}:generateContent?key=${params.apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      system_instruction: {
+        parts: [{ text: params.systemPrompt }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: params.userSpeech }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+        maxOutputTokens: 300,
+      },
+    }),
+    signal: params.signal,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Gemini ${params.model} HTTP ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{ text?: string }>;
+      };
+    }>;
+  };
+
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (text) {
+    const parsed = JSON.parse(text) as IntentResult;
+    if (parsed.intent && parsed.replyText) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+/**
+ * AI Intent Classifier via Groq Cloud with seamless multi-LLM failover:
+ * Tier 1: Groq llama-3.3-70b-versatile (Ultra-fast, nuanced reasoning)
+ * Tier 2: Groq llama-3.1-8b-instant (Sub-150ms high-speed backup)
+ * Tier 3: Google Gemini 2.0 Flash / 1.5 Flash (Multi-cloud provider resilience)
+ * Tier 4: Procedural Triage Fallback (Guaranteed zero-failure deterministic response)
  */
 export async function classifyWithAi(params: {
   callerSpeech: string;
@@ -149,31 +256,13 @@ export async function classifyWithAi(params: {
 }): Promise<IntentResult> {
   const { callerSpeech, tenant, timeoutMs = 1200 } = params;
 
-  // 1. First run instant procedural check
+  // 1. First run instant procedural check (<1ms)
   const proceduralResult = classifyProceduralIntent(callerSpeech, tenant);
   if (proceduralResult) {
     return proceduralResult;
   }
 
-  const groqKey = process.env.GROQ_API_KEY;
-  if (!groqKey) {
-    // Graceful procedural fallback if no API key
-    return {
-      intent: "routine_inquiry",
-      confidence: 0.7,
-      summary: callerSpeech.slice(0, 80),
-      emergencyDetected: false,
-      replyText: `Thanks for providing that detail. We can certainly assist you with your ${tenant.industry.replace("_", " ")} needs. Would you like to schedule a technician or hear more about our services?`,
-      action: "gather",
-    };
-  }
-
-  // 2. High-speed Groq Inference (qwen3.8-27b or openai/gpt-oss-20b)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    const systemPrompt = `You are ${tenant.voiceConfig.personaName}, the AI receptionist for ${tenant.name}.
+  const systemPrompt = `You are ${tenant.voiceConfig.personaName}, the AI receptionist for ${tenant.name}.
 Analyze the caller's spoken input and classify their intent into one of:
 - routine_inquiry
 - book_appointment
@@ -197,48 +286,59 @@ Respond with STRICT JSON format only:
   "action": "gather" | "transfer" | "record" | "hangup"
 }`;
 
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${groqKey}`,
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-20b",
-        temperature: 0.1,
-        max_tokens: 250,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: callerSpeech },
-        ],
-      }),
-      signal: controller.signal,
-    });
+  // 2. High-speed Groq Inference (llama-3.3-70b-versatile -> llama-3.1-8b-instant)
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    const groqModels = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+    for (const model of groqModels) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    clearTimeout(timeoutId);
+        const result = await queryGroqChat({
+          apiKey: groqKey,
+          model,
+          systemPrompt,
+          userSpeech: callerSpeech,
+          signal: controller.signal,
+        });
 
-    if (!res.ok) {
-      throw new Error(`Groq HTTP ${res.status}`);
-    }
-
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const content = data.choices?.[0]?.message?.content;
-    if (content) {
-      const parsed = JSON.parse(content) as IntentResult;
-      if (parsed.intent && parsed.replyText) {
-        return parsed;
+        clearTimeout(timeoutId);
+        if (result) return result;
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.warn(`[IntentClassifier] Groq ${model} failed, falling back: ${errorMsg}`);
       }
     }
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.warn(`[IntentClassifier] AI classification fallback triggered: ${errorMsg}`);
   }
 
-  // Safe fallback response
+  // 3. Multi-Provider Failover: Google Generative AI (gemini-2.0-flash -> gemini-1.5-flash)
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    const geminiModels = ["gemini-2.0-flash", "gemini-1.5-flash"];
+    for (const model of geminiModels) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        const result = await queryGeminiGenerate({
+          apiKey: geminiKey,
+          model,
+          systemPrompt,
+          userSpeech: callerSpeech,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        if (result) return result;
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.warn(`[IntentClassifier] Gemini ${model} failed, falling back: ${errorMsg}`);
+      }
+    }
+  }
+
+  // 4. Safe Procedural Fallback Triage (Guaranteeing Zero Failure)
   return {
     intent: "routine_inquiry",
     confidence: 0.6,
