@@ -1,5 +1,7 @@
-import { supabase } from "@/lib/supabase-client";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase-client";
 import * as crypto from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 
 export type TicketPriority = "STANDARD" | "URGENT" | "CRITICAL";
 export type TicketStatus = "PENDING" | "CONFIRMED" | "DISPATCHED" | "ESCALATED" | "RESOLVED" | "COMPLETED" | "CANCELLED";
@@ -15,6 +17,7 @@ export interface TicketRequest {
   language?: string;
   metadata?: Record<string, string | number | boolean>;
   tenantId?: string;
+  isSimulated?: boolean;
 }
 
 export interface TicketRecord {
@@ -32,6 +35,7 @@ export interface TicketRecord {
   language: string;
   smsConfirmation: string;
   checksum: string;
+  isSimulated?: boolean;
   notes?: string[];
   metadata?: Record<string, string | number | boolean>;
 }
@@ -48,95 +52,120 @@ export function phoneMatches(phone1: string, phone2: string): boolean {
   return normalizePhone(phone1) === normalizePhone(phone2);
 }
 
+/**
+ * Generates verified, honest SMS confirmations reflecting actual transaction states.
+ * Prohibits fabricating fixed arrival times (e.g. "18 mins") or confirmed bookings
+ * when the request is actually pending or escalated to a human.
+ */
 export function generateSmsConfirmation(
   category: string,
   callerName: string,
   serviceType: string,
   details: string,
   ticketId: string,
-  language: string = "en"
+  language: string = "en",
+  status: TicketStatus = "PENDING",
+  isSimulated: boolean = false
 ): string {
   const lang = (language || "en").toLowerCase();
+  const simPrefix = isSimulated ? "[DEMO SIMULATION] " : "";
 
   if (lang === "hi") {
-    if (category === "clinic") {
-      return `[वाणीEdge AI] डॉ. शर्मा क्लिनिक: ${callerName} के लिए अपॉइंटमेंट कन्फर्म। टिकट: ${ticketId}। समय: ${details}।`;
-    } else if (category === "restaurant") {
-      return `[वाणीEdge AI] भोजनालय: आर्डर कन्फर्म (${serviceType})। टिकट: ${ticketId}। अनुमानित डिलीवरी: 25-35 मिनट।`;
-    } else if (category === "retail") {
-      return `[वाणीEdge AI] रिटेल सपोर्ट: ${callerName} के लिए अनुरोध दर्ज (${serviceType})। टिकट: ${ticketId}। विवरण: ${details}।`;
-    } else if (category === "realestate") {
-      return `[वाणीEdge AI] रियल एस्टेट: प्रॉपर्टी विजिट शेड्यूल हुई (${serviceType})। टिकट: ${ticketId}। समय: ${details}।`;
-    } else if (category === "finance") {
-      return `[वाणीEdge AI] बैंकिंग सेवा: ${callerName} का अनुरोध प्रोसेस हुआ (${serviceType})। टिकट: ${ticketId}।`;
-    } else if (category === "hospitality") {
-      return `[वाणीEdge AI] होटल रिजर्वेशन: कमरा बुक हुआ (${serviceType})। टिकट: ${ticketId}। विवरण: ${details}।`;
-    } else if (category === "general") {
-      return `[वाणीEdge AI] ग्राहक सेवा: सहायता टिकट जनरेट हुआ (${serviceType})। टिकट: ${ticketId}।`;
-    } else {
-      return `[वाणीEdge AI] एपेक्स रेस्क्यू: ${serviceType} के लिए वाहन रवाना। टिकट: ${ticketId}। ईटीए: 18 मिनट।`;
+    if (status === "ESCALATED") {
+      return `${simPrefix}[वाणीEdge AI] आपातकालीन अनुरोध दर्ज: ${callerName} (${serviceType})। टिकट: ${ticketId}। समन्वयक को कॉल कनेक्ट किया जा रहा है।`;
     }
+    if (status === "CONFIRMED") {
+      return `${simPrefix}[वाणीEdge AI] टिकट ${ticketId}: ${callerName} के लिए ${serviceType} पुष्टि। संदर्भ: ${details || "मानक"}।`;
+    }
+    return `${simPrefix}[वाणीEdge AI] अनुरोध प्राप्त: ${callerName} (${serviceType})। टिकट: ${ticketId}। उपलब्धता पुष्टि प्रक्रियाधीन।`;
   }
 
   if (lang === "kn") {
-    if (category === "clinic") {
-      return `[ವಾಣಿEdge AI] ಡಾ. ಶರ್ಮಾ ಕ್ಲಿನಿಕ್: ${callerName} ಅವರಿಗೆ ಅಪಾಯಿಂಟ್ಮೆಂಟ್ ದೃಢೀಕರಿಸಲಾಗಿದೆ. ಟಿಕೆಟ್: ${ticketId}. ಸಮಯ: ${details}.`;
-    } else if (category === "restaurant") {
-      return `[ವಾಣಿEdge AI] ಭೋಜನಾಲಯ: ಆರ್ಡರ್ ದೃಢೀಕರಿಸಲಾಗಿದೆ (${serviceType}). ಟಿಕೆಟ್: ${ticketId}. ವಿತರಣೆ ಸಮಯ: 25-35 ನಿಮಿಷಗಳು.`;
-    } else if (category === "retail") {
-      return `[ವಾಣಿEdge AI] ಚಿಲ್ಲರೆ ಬೆಂಬಲ: ${callerName} ಗಾಗಿ ವಿನಂತಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ (${serviceType}). ಟಿಕೆಟ್: ${ticketId}.`;
-    } else if (category === "realestate") {
-      return `[ವಾಣಿEdge AI] ರಿಯಲ್ ಎಸ್ಟೇಟ್: ಆಸ್ತಿ ಭೇಟಿ ನಿಗದಿಪಡಿಸಲಾಗಿದೆ (${serviceType}). ಟಿಕೆಟ್: ${ticketId}.`;
-    } else if (category === "finance") {
-      return `[ವಾಣಿEdge AI] ಬ್ಯಾಂಕಿಂಗ್ ಸೇವೆ: ${callerName} ಅವರ ವಿನಂತಿ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ (${serviceType}). ಟಿಕೆಟ್: ${ticketId}.`;
-    } else if (category === "hospitality") {
-      return `[ವಾಣಿEdge AI] ಹೋಟೆಲ್ ಮೀಸಲಾತಿ: ಕೊಠಡಿ ಕಾಯ್ದಿರಿಸಲಾಗಿದೆ (${serviceType}). ಟಿಕೆಟ್: ${ticketId}.`;
-    } else if (category === "general") {
-      return `[ವಾಣಿEdge AI] ಗ್ರಾಹಕ ಸೇವೆ: ಬೆಂಬಲ ಟಿಕೆಟ್ ರಚಿಸಲಾಗಿದೆ (${serviceType}). ಟಿಕೆಟ್: ${ticketId}.`;
-    } else {
-      return `[ವಾಣಿEdge AI] ಅಪೆಕ್ಸ್ ರೆಸ್ಕ್ಯೂ: ${serviceType} ಗಾಗಿ ರಕ್ಷಣಾ ವಾಹನ ಕಳುಹಿಸಲಾಗಿದೆ. ಟಿಕೆಟ್: ${ticketId}. ಇಟಿಎ: 18 ನಿಮಿಷಗಳು.`;
+    if (status === "ESCALATED") {
+      return `${simPrefix}[ವಾಣಿEdge AI] ತುರ್ತು ವಿನಂತಿ ದಾಖಲಾಗಿದೆ: ${callerName} (${serviceType}). ಟಿಕೆಟ್: ${ticketId}. ಮಾನವ ಅಧಿಕಾರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗಿದೆ.`;
     }
+    return `${simPrefix}[ವಾಣಿEdge AI] ವಿನಂತಿ ದಾಖಲಾಗಿದೆ: ${callerName} (${serviceType}). ಟಿಕೆಟ್: ${ticketId}. ದೃಢೀಕರಣ ನಿರೀಕ್ಷೆಯಲ್ಲಿದೆ.`;
   }
 
   if (lang === "es") {
-    if (category === "clinic") {
-      return `[VaniEdge AI] Cita confirmada para ${callerName} en Clínica Dr. Sharma. Ticket: ${ticketId}. Turno: ${details}.`;
-    } else if (category === "restaurant") {
-      return `[VaniEdge AI] Restaurante Bhojanalaya: Pedido confirmado (${serviceType}). Ticket: ${ticketId}. Entrega estimada: 25-35 mins.`;
-    } else {
-      return `[VaniEdge AI] Asistencia en Carretera Apex: Vehículo enviado para ${serviceType}. Ticket: ${ticketId}. ETA: 18 mins.`;
+    if (status === "ESCALATED") {
+      return `${simPrefix}[VaniEdge AI] Solicitud prioritaria registrada para ${callerName} (${serviceType}). Ticket: ${ticketId}. Derivando a coordinador de guardia.`;
     }
+    if (status === "CONFIRMED") {
+      return `${simPrefix}[VaniEdge AI] Confirmado: ${callerName} (${serviceType}). Ticket: ${ticketId}.`;
+    }
+    return `${simPrefix}[VaniEdge AI] Solicitud recibida para ${callerName} (${serviceType}). Ticket: ${ticketId}. Pendiente de confirmación.`;
   }
 
   // English Default
-  if (category === "clinic") {
-    return `[VaniEdge AI] Appointment confirmed for ${callerName} at Dr. Sharma Clinic. Ticket: ${ticketId}. Slot: ${details}.`;
-  } else if (category === "restaurant") {
-    return `[VaniEdge AI] Bhojanalaya Kitchen: Order confirmed (${serviceType}). Ticket: ${ticketId}. Estimated delivery: 25-35 mins.`;
-  } else if (category === "retail") {
-    return `[VaniEdge AI] Prime Retail: Inquiry & Order logged for ${callerName} (${serviceType}). Ticket: ${ticketId}. Details: ${details}.`;
-  } else if (category === "realestate") {
-    return `[VaniEdge AI] Skyline Realty: Viewing scheduled for ${callerName} (${serviceType}). Ticket: ${ticketId}. Time: ${details}.`;
-  } else if (category === "finance") {
-    return `[VaniEdge AI] Apex Banking: Request confirmed for ${callerName} (${serviceType}). Ticket: ${ticketId}. Ref: ${details}.`;
-  } else if (category === "hospitality") {
-    return `[VaniEdge AI] Grand Horizon Hotel: Reservation confirmed for ${callerName} (${serviceType}). Ticket: ${ticketId}. Stay: ${details}.`;
-  } else if (category === "general") {
-    return `[VaniEdge AI] Enterprise Support: Ticket created for ${callerName} (${serviceType}). Ticket: ${ticketId}. Status: In Progress.`;
-  } else {
-    return `[VaniEdge AI] Apex Rescue: Recovery vehicle dispatched for ${serviceType}. Ticket: ${ticketId}. ETA: 18 mins.`;
+  if (status === "ESCALATED") {
+    return `${simPrefix}[VaniEdge AI] Priority emergency request logged for ${callerName} (${serviceType}). Ticket: ${ticketId}. Transferring directly to human coordinator.`;
   }
+  if (status === "CONFIRMED") {
+    return `${simPrefix}[VaniEdge AI] Request confirmed for ${callerName} (${serviceType}). Ticket: ${ticketId}. Details: ${details || "Processed"}.`;
+  }
+  return `${simPrefix}[VaniEdge AI] Request received for ${callerName} (${serviceType}). Ticket: ${ticketId}. Status: Pending coordinator confirmation.`;
 }
 
 export class TicketDispatcher {
   private tickets: Map<string, TicketRecord> = new Map();
+  private diskFilePath: string | null = null;
+  private isLoaded = false;
+
+  constructor() {
+    // Only configure local disk persistence in Node.js environments (fs available)
+    if (typeof process !== "undefined" && process.cwd && typeof fs.existsSync === "function") {
+      this.diskFilePath = path.join(process.cwd(), ".data", "dispatch_tickets.json");
+      this.loadFromDisk();
+    }
+  }
+
+  private loadFromDisk(): void {
+    if (!this.diskFilePath || this.isLoaded) return;
+    try {
+      if (fs.existsSync(this.diskFilePath)) {
+        const raw = fs.readFileSync(this.diskFilePath, "utf-8");
+        const list = JSON.parse(raw) as TicketRecord[];
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            this.tickets.set(item.ticketId, item);
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    this.isLoaded = true;
+  }
+
+  private saveToDisk(): void {
+    if (!this.diskFilePath) return;
+    try {
+      const dir = path.dirname(this.diskFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(
+        this.diskFilePath,
+        JSON.stringify(Array.from(this.tickets.values()), null, 2),
+        "utf-8"
+      );
+    } catch {
+      // Ignore
+    }
+  }
 
   public createTicket(req: TicketRequest): TicketRecord {
+    this.loadFromDisk();
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const prefix = req.category.slice(0, 3).toUpperCase();
     const ticketId = `VANI-${prefix}-${randomSuffix}`;
     const timestamp = new Date().toISOString();
     const language = req.language || "en";
+
+    // Accurate status mapping: URGENT / CRITICAL -> ESCALATED, otherwise PENDING
+    const status: TicketStatus =
+      req.priority === "URGENT" || req.priority === "CRITICAL" ? "ESCALATED" : "PENDING";
 
     const checksum = generateChecksum(`${ticketId}:${req.callerPhone}:${timestamp}`);
     const smsConfirmation = generateSmsConfirmation(
@@ -145,7 +174,9 @@ export class TicketDispatcher {
       req.serviceType,
       req.details,
       ticketId,
-      language
+      language,
+      status,
+      Boolean(req.isSimulated)
     );
 
     const record: TicketRecord = {
@@ -157,23 +188,24 @@ export class TicketDispatcher {
       category: req.category,
       serviceType: req.serviceType,
       details: req.details,
-      status: req.priority === "URGENT" ? "ESCALATED" : "CONFIRMED",
+      status,
       priority: req.priority || "STANDARD",
       language,
       smsConfirmation,
       checksum,
+      isSimulated: Boolean(req.isSimulated),
       notes: [],
       metadata: req.metadata,
     };
 
     this.tickets.set(ticketId, record);
+    this.saveToDisk();
 
-    // Asynchronously try to persist to Supabase if configured and not in test
-    if (process.env.NODE_ENV !== "test" && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    // Persist to Supabase if configured
+    if (isSupabaseConfigured) {
       Promise.resolve(
-        supabase
-          .from("dispatch_tickets")
-          .insert([{
+        supabase.from("dispatch_tickets").insert([
+          {
             tenant_id: record.tenant_id,
             ticket_id: record.ticketId,
             caller_name: record.callerName,
@@ -183,8 +215,10 @@ export class TicketDispatcher {
             details: record.details,
             priority: record.priority,
             language: record.language,
-            status: record.status
-          }])
+            status: record.status,
+            sms_confirmation: record.smsConfirmation,
+          },
+        ])
       ).catch(() => {});
     }
 
@@ -192,10 +226,12 @@ export class TicketDispatcher {
   }
 
   public getTicket(ticketId: string): TicketRecord | undefined {
+    this.loadFromDisk();
     return this.tickets.get(ticketId);
   }
 
   public updateTicketStatus(ticketId: string, status: TicketStatus, note?: string): boolean {
+    this.loadFromDisk();
     const ticket = this.tickets.get(ticketId);
     if (!ticket) return false;
 
@@ -205,12 +241,11 @@ export class TicketDispatcher {
       ticket.notes.push(`[${new Date().toISOString()}] ${note}`);
     }
 
-    if (process.env.NODE_ENV !== "test" && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    this.saveToDisk();
+
+    if (isSupabaseConfigured) {
       Promise.resolve(
-        supabase
-          .from("dispatch_tickets")
-          .update({ status })
-          .eq("ticket_id", ticketId)
+        supabase.from("dispatch_tickets").update({ status }).eq("ticket_id", ticketId)
       ).catch(() => {});
     }
 
@@ -218,6 +253,7 @@ export class TicketDispatcher {
   }
 
   public getTicketsByPhone(phone: string): TicketRecord[] {
+    this.loadFromDisk();
     const targetNorm = normalizePhone(phone);
     return Array.from(this.tickets.values()).filter(
       (t) => normalizePhone(t.callerPhone) === targetNorm
@@ -225,6 +261,7 @@ export class TicketDispatcher {
   }
 
   public findTickets(filter: { category?: string; status?: string; phone?: string; tenantId?: string }): TicketRecord[] {
+    this.loadFromDisk();
     return Array.from(this.tickets.values()).filter((t) => {
       if (filter.category && t.category !== filter.category) return false;
       if (filter.status && t.status !== filter.status) return false;
@@ -235,14 +272,17 @@ export class TicketDispatcher {
   }
 
   public count(): number {
+    this.loadFromDisk();
     return this.tickets.size;
   }
 
   public listTickets(): TicketRecord[] {
+    this.loadFromDisk();
     return Array.from(this.tickets.values());
   }
 
   public exportSnapshot(): TicketRecord[] {
+    this.loadFromDisk();
     return Array.from(this.tickets.values());
   }
 
@@ -251,5 +291,6 @@ export class TicketDispatcher {
     for (const r of records) {
       this.tickets.set(r.ticketId, r);
     }
+    this.saveToDisk();
   }
 }

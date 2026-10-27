@@ -69,6 +69,48 @@ async function parseParams(request: Request): Promise<Record<string, string>> {
   return params;
 }
 
+/**
+ * Validates Twilio webhook signatures strictly on Edge Workers, failing closed in production if secret missing.
+ */
+async function verifyTwilioWorkerSignature(
+  request: Request,
+  params: Record<string, string>,
+  env: Env,
+  url: URL
+): Promise<{ valid: boolean; response?: Response }> {
+  const isProduction = env.ENVIRONMENT === 'production' || !url.hostname.includes('localhost');
+  if (isProduction && !env.TWILIO_AUTH_TOKEN) {
+    return {
+      valid: false,
+      response: new Response('Internal Server Error: TWILIO_AUTH_TOKEN required in production', { status: 500 }),
+    };
+  }
+
+  if (env.TWILIO_AUTH_TOKEN) {
+    const signatureHeader = request.headers.get('X-Twilio-Signature');
+    if (!signatureHeader) {
+      return {
+        valid: false,
+        response: new Response('Unauthorized: Missing Twilio Signature', { status: 401 }),
+      };
+    }
+    const isValid = await validateTwilioSignature(
+      signatureHeader,
+      request.url,
+      params,
+      env.TWILIO_AUTH_TOKEN
+    );
+    if (!isValid) {
+      return {
+        valid: false,
+        response: new Response('Unauthorized: Invalid Twilio Signature', { status: 401 }),
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -108,7 +150,7 @@ export default {
             failover_sla: {
               connect_deadline_ms: env.FAILOVER_CONNECT_TIMEOUT_MS || '1200',
               ttft_deadline_ms: env.FAILOVER_TTFT_TIMEOUT_MS || '1500',
-              zero_dropped_calls: true,
+              architecture: 'Sub-second edge watchdog with automated warm carrier transfer',
             },
           },
           null,
@@ -120,7 +162,7 @@ export default {
       );
     }
 
-    // Route: Health Check
+    // Route: Health Check (Sanitized - Zero Credential / SID Leaks)
     if (pathname === '/health' && method === 'GET') {
       const hasTwilio = Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN);
       const hasElevenLabs = Boolean(env.ELEVENLABS_API_KEY || env.ELEVENLABS_AGENT_ID);
@@ -128,32 +170,26 @@ export default {
       return new Response(
         JSON.stringify(
           {
-            status: hasTwilio ? 'healthy' : 'degraded',
+            status: hasTwilio && hasElevenLabs ? 'healthy' : 'degraded',
             timestamp: new Date().toISOString(),
             providers: {
               twilio: {
                 configured: hasTwilio,
-                account_sid: env.TWILIO_ACCOUNT_SID
-                  ? `${env.TWILIO_ACCOUNT_SID.substring(0, 6)}...`
-                  : null,
-                phone_number: env.TWILIO_PHONE_NUMBER || null,
               },
               elevenlabs: {
                 configured: hasElevenLabs,
-                agent_id: env.ELEVENLABS_AGENT_ID || null,
               },
             },
             watchdog: {
               connect_timeout_ms: parseInt(env.FAILOVER_CONNECT_TIMEOUT_MS || '1200', 10),
               ttft_timeout_ms: parseInt(env.FAILOVER_TTFT_TIMEOUT_MS || '1500', 10),
-              fallback_target: env.FALLBACK_HUMAN_NUMBER || '+18005550199',
             },
             sutradb: {
               status: 'ready',
               documents_indexed: sutraEngine.size(),
             },
             dispatcher: {
-              total_tickets: await ticketDispatcher.count(),
+              status: 'ready',
             },
           },
           null,
@@ -186,29 +222,18 @@ export default {
     // Route: Twilio Inbound Voice Webhook
     if (pathname === '/voice/incoming' && method === 'POST') {
       const webhookStart = performance.now();
-      MetricsCollector.getInstance().callsTotal++;
 
       // Parse Form Data from Twilio
       const params = await parseParams(request);
       const payload = params as unknown as TwilioVoiceWebhookPayload;
 
-      // Validate Twilio HMAC-SHA1 Signature strictly in production
-      const signatureHeader = request.headers.get('X-Twilio-Signature');
-      if (env.TWILIO_AUTH_TOKEN) {
-        if (!signatureHeader) {
-          return new Response('Unauthorized: Missing Twilio Signature', { status: 401 });
-        }
-        const isValid = await validateTwilioSignature(
-          signatureHeader,
-          request.url,
-          params,
-          env.TWILIO_AUTH_TOKEN
-        );
-
-        if (!isValid) {
-          return new Response('Unauthorized: Invalid Twilio Signature', { status: 401 });
-        }
+      // Validate Twilio HMAC-SHA1 Signature strictly BEFORE recording metrics
+      const sigVerification = await verifyTwilioWorkerSignature(request, params, env, url);
+      if (!sigVerification.valid && sigVerification.response) {
+        return sigVerification.response;
       }
+
+      MetricsCollector.getInstance().callsTotal++;
 
       // Generate WebSocket URL for media stream
       const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -235,21 +260,10 @@ export default {
     // Route: Twilio Call Status Callback
     if (pathname === '/voice/status' && method === 'POST') {
       const params = await parseParams(request);
-      const signatureHeader = request.headers.get('X-Twilio-Signature');
-      if (env.TWILIO_AUTH_TOKEN) {
-        if (!signatureHeader) {
-          return new Response('Unauthorized: Missing Twilio Signature', { status: 401 });
-        }
-        const isValid = await validateTwilioSignature(
-          signatureHeader,
-          request.url,
-          params,
-          env.TWILIO_AUTH_TOKEN
-        );
 
-        if (!isValid) {
-          return new Response('Unauthorized: Invalid Twilio Signature', { status: 401 });
-        }
+      const sigVerification = await verifyTwilioWorkerSignature(request, params, env, url);
+      if (!sigVerification.valid && sigVerification.response) {
+        return sigVerification.response;
       }
 
       const callStatus = params.CallStatus;
@@ -306,21 +320,10 @@ export default {
     // Route: Emergency Failover Fallback Webhook
     if (pathname === '/voice/fallback' && method === 'POST') {
       const params = await parseParams(request);
-      const signatureHeader = request.headers.get('X-Twilio-Signature');
-      if (env.TWILIO_AUTH_TOKEN) {
-        if (!signatureHeader) {
-          return new Response('Unauthorized: Missing Twilio Signature', { status: 401 });
-        }
-        const isValid = await validateTwilioSignature(
-          signatureHeader,
-          request.url,
-          params,
-          env.TWILIO_AUTH_TOKEN
-        );
 
-        if (!isValid) {
-          return new Response('Unauthorized: Invalid Twilio Signature', { status: 401 });
-        }
+      const sigVerification = await verifyTwilioWorkerSignature(request, params, env, url);
+      if (!sigVerification.valid && sigVerification.response) {
+        return sigVerification.response;
       }
 
       const humanNumber = env.FALLBACK_HUMAN_NUMBER || '+18005550199';
@@ -352,18 +355,21 @@ export default {
           minScore?: number;
         };
 
-        if (!body.query || typeof body.query !== 'string') {
-          return new Response(JSON.stringify({ error: "Missing required 'query' field" }), {
+        if (!body.query || typeof body.query !== 'string' || body.query.length > 1000) {
+          return new Response(JSON.stringify({ error: "Invalid 'query' parameter (string, max 1000 chars required)" }), {
             status: 400,
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
+        const topK = Math.min(Math.max(1, body.topK ?? 3), 20);
+        const minScore = Math.min(Math.max(0, body.minScore ?? 0), 1);
+
         const results = sutraEngine.query(body.query, {
           category: body.category,
           filter: body.filter,
-          topK: body.topK ?? 3,
-          minScore: body.minScore ?? 0,
+          topK,
+          minScore,
         });
 
         return new Response(JSON.stringify({ query: body.query, count: results.length, results }), {
@@ -383,10 +389,11 @@ export default {
     if (pathname === '/api/dispatch' && method === 'POST') {
       try {
         const body = (await request.json()) as TicketRequest;
-        if (!body.callerName || !body.callerPhone || !body.category || !body.serviceType) {
+        if (!body.callerName || !body.callerPhone || !body.category || !body.serviceType ||
+            body.callerName.length > 100 || body.callerPhone.length > 50) {
           return new Response(
             JSON.stringify({
-              error: 'Missing required fields (callerName, callerPhone, category, serviceType)',
+              error: 'Missing or invalid fields (callerName, callerPhone, category, serviceType)',
             }),
             { status: 400, headers: { 'Content-Type': 'application/json' } }
           );

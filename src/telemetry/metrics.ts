@@ -157,7 +157,10 @@ export class MetricsCollector {
           typical_sla: '< 20ms (dispatched immediately at 1200ms threshold)',
         },
       },
-      recent_failover_events: this.recentFailovers,
+      recent_failover_events: this.recentFailovers.map((e) => ({
+        ...e,
+        callSid: e.callSid && e.callSid.length > 8 ? `${e.callSid.slice(0, 4)}...${e.callSid.slice(-4)}` : 'masked',
+      })),
     };
   }
 

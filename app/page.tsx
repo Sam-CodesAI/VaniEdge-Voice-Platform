@@ -113,7 +113,12 @@ export default function VaniEdgePage() {
     }
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    try {
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch (err) {
+      console.warn("Signout request failed:", err);
+    }
     if (typeof window !== "undefined") {
       localStorage.removeItem("vaniedge_auth_user");
       localStorage.removeItem("vaniedge_session_token");

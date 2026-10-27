@@ -11,7 +11,6 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
-  Key,
 } from "lucide-react";
 import { UserRecord } from "@/lib/auth-store";
 
@@ -57,13 +56,6 @@ export default function AuthModal({
   }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
-
-  // Quick 1-Click Demo Account Loader
-  const loadDemoAccount = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError(null);
-  };
 
   // Handle Email & Password Submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -180,33 +172,7 @@ export default function AuthModal({
           </p>
         </div>
 
-        {/* Quick 1-Click Demo Accounts Pill */}
-        {mode === "signin" && (
-          <div className="mb-5 p-3 rounded-xl bg-slate-50 border border-slate-300">
-            <div className="text-[10px] font-oswald uppercase font-bold text-slate-700 flex items-center gap-1.5 mb-2">
-              <Key className="w-3.5 h-3.5 text-emerald-600" />
-              <span>One-Click Test Accounts</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => loadDemoAccount("developer@vaniedge.ai", "password123")}
-                className="text-left p-2 rounded-lg bg-white border border-slate-300 hover:border-black transition-colors cursor-pointer"
-              >
-                <div className="text-xs font-oswald font-bold uppercase text-black">Arjun (Dev)</div>
-                <div className="text-[10px] text-slate-600 font-mono truncate">developer@vaniedge.ai</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => loadDemoAccount("demo@vaniedge.ai", "password123")}
-                className="text-left p-2 rounded-lg bg-white border border-slate-300 hover:border-black transition-colors cursor-pointer"
-              >
-                <div className="text-xs font-oswald font-bold uppercase text-black">Priya (Growth)</div>
-                <div className="text-[10px] text-slate-600 font-mono truncate">demo@vaniedge.ai</div>
-              </button>
-            </div>
-          </div>
-        )}
+
 
         {/* Alert / Error Message */}
         {error && (

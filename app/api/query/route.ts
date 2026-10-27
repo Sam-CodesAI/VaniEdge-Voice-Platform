@@ -1,42 +1,86 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SutraHybridEngine, KnowledgeDocument } from "@/src/engine/sutradb";
-import { supabase } from "@/lib/supabase-client";
+import { SutraHybridEngine } from "@/src/engine/sutradb";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase-client";
+import { DEFAULT_KNOWLEDGE_PRESETS } from "@/lib/sutradb-engine";
+import { requireAuth } from "@/lib/auth-guard";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { z } from "zod";
+
+export const dynamic = "force-dynamic";
+
+const QuerySchema = z.object({
+  query: z.string().min(1).max(1000),
+  category: z.string().max(50).optional(),
+  tenantId: z.string().max(50).optional(),
+  filter: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  topK: z.number().int().min(1).max(20).default(3),
+  minScore: z.number().min(0).max(1).default(0),
+});
+
+const InsertDocSchema = z.object({
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(10000),
+  category: z.string().max(50).default("general"),
+  metadata: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  tenantId: z.string().max(50).optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as {
-      query?: string;
-      category?: string;
-      tenantId?: string;
-      filter?: Record<string, string | number | boolean>;
-      topK?: number;
-      minScore?: number;
-    };
-    const { query, category, filter, topK, minScore, tenantId } = body;
-
-    if (!query || typeof query !== "string") {
-      return NextResponse.json({ error: "Missing required 'query' field" }, { status: 400 });
+    // 1. Rate limiting
+    const clientIp = getClientIp(request);
+    const rateCheck = checkRateLimit(clientIp, "rag_query", 60, 60 * 1000);
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { error: "Too many query requests. Please slow down." },
+        { status: 429, headers: { "Retry-After": Math.ceil(rateCheck.resetMs / 1000).toString() } }
+      );
     }
 
-    // Connect to Supabase and pull live knowledge rows
-    let queryBuilder = supabase.from("sutradb_knowledge").select("*");
-    if (tenantId) queryBuilder = queryBuilder.eq("tenant_id", tenantId);
-    
-    const { data: dbDocs, error } = await queryBuilder;
-    if (error) throw new Error("Failed to sync knowledge from database");
+    const rawBody = (await request.json()) as unknown;
+    const parseResult = QuerySchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parseResult.error.format() },
+        { status: 400 }
+      );
+    }
+
+    const { query, category, filter, topK, minScore, tenantId } = parseResult.data;
 
     const engine = new SutraHybridEngine();
-    
-    // Load live rows into the lightning-fast Edge memory engine
-    if (dbDocs) {
-      for (const row of dbDocs) {
-        engine.insert({
-          id: row.id,
-          title: row.title,
-          content: row.content,
-          category: row.category,
-          metadata: row.metadata,
-        });
+
+    // Seed preset documents as fallback
+    for (const preset of DEFAULT_KNOWLEDGE_PRESETS) {
+      engine.insert({
+        id: preset.id,
+        title: preset.title,
+        content: preset.content,
+        category: preset.category,
+      });
+    }
+
+    // Connect to Supabase if configured and pull live tenant knowledge rows
+    if (isSupabaseConfigured) {
+      try {
+        let queryBuilder = supabase.from("sutradb_knowledge").select("*");
+        if (tenantId) queryBuilder = queryBuilder.eq("tenant_id", tenantId);
+
+        const { data: dbDocs } = await queryBuilder;
+        if (dbDocs && Array.isArray(dbDocs)) {
+          for (const row of dbDocs) {
+            engine.insert({
+              id: row.id,
+              title: row.title,
+              content: row.content,
+              category: row.category,
+              metadata: row.metadata,
+            });
+          }
+        }
+      } catch {
+        // Fallback to presets
       }
     }
 
@@ -44,8 +88,8 @@ export async function POST(request: NextRequest) {
     const results = engine.query(query, {
       category,
       filter,
-      topK: topK ?? 3,
-      minScore: minScore ?? 0,
+      topK,
+      minScore,
     });
     const latencyMs = +(performance.now() - start).toFixed(2);
 
@@ -62,27 +106,51 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  try {
-    const body = (await request.json()) as any;
+  // 1. Enforce authentication & CSRF
+  const { auth, errorResponse } = await requireAuth(request, { checkCsrf: true });
+  if (errorResponse) {
+    return errorResponse;
+  }
 
-    if (!body.title || !body.content) {
+  try {
+    const rawBody = (await request.json()) as unknown;
+    const parseResult = InsertDocSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: "Missing required 'title' or 'content' field" },
+        { error: "Validation failed", details: parseResult.error.format() },
         { status: 400 }
       );
     }
 
+    const { title, content, category, metadata, tenantId: bodyTenantId } = parseResult.data;
+
+    // Scope tenant_id strictly to authenticated user unless super-admin
+    const isSuperAdmin = auth!.user.role === "admin";
+    const effectiveTenantId = isSuperAdmin ? bodyTenantId || auth!.user.id : auth!.user.id;
+
     const doc = {
-      tenant_id: body.tenantId || null,
-      title: body.title,
-      content: body.content,
-      category: body.category || "general",
-      metadata: body.metadata,
+      tenant_id: effectiveTenantId,
+      title,
+      content,
+      category,
+      metadata,
     };
 
     const start = performance.now();
-    const { data, error } = await supabase.from("sutradb_knowledge").insert([doc]).select().single();
-    if (error) throw new Error(error.message);
+    let data = doc;
+
+    if (isSupabaseConfigured) {
+      const { data: inserted, error } = await supabase
+        .from("sutradb_knowledge")
+        .insert([doc])
+        .select()
+        .single();
+      if (!error && inserted) {
+        data = inserted;
+      }
+    }
+
     const latencyMs = +(performance.now() - start).toFixed(2);
 
     return NextResponse.json(
@@ -100,17 +168,44 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const tenantId = searchParams.get("tenantId") || undefined;
-  
-  let queryBuilder = supabase.from("sutradb_knowledge").select("*").order("created_at", { ascending: false });
-  if (tenantId) queryBuilder = queryBuilder.eq("tenant_id", tenantId);
-  
-  const { data, error } = await queryBuilder;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // 1. Enforce authentication
+  const { auth, errorResponse } = await requireAuth(request);
+  if (errorResponse) {
+    return errorResponse;
+  }
 
+  const { searchParams } = new URL(request.url);
+  const requestedTenantId = searchParams.get("tenantId") || undefined;
+
+  const isSuperAdmin = auth!.user.role === "admin";
+  const effectiveTenantId = isSuperAdmin ? requestedTenantId : auth!.user.id;
+
+  if (isSupabaseConfigured) {
+    try {
+      let queryBuilder = supabase
+        .from("sutradb_knowledge")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (effectiveTenantId) {
+        queryBuilder = queryBuilder.eq("tenant_id", effectiveTenantId);
+      }
+
+      const { data, error } = await queryBuilder;
+      if (!error && data) {
+        return NextResponse.json({
+          totalDocuments: data.length,
+          documents: data,
+        });
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback to presets if Supabase not configured
   return NextResponse.json({
-    totalDocuments: data.length,
-    documents: data,
+    totalDocuments: DEFAULT_KNOWLEDGE_PRESETS.length,
+    documents: DEFAULT_KNOWLEDGE_PRESETS,
   });
 }

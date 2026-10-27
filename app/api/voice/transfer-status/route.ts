@@ -12,6 +12,7 @@ import { getTenantById } from "@/lib/telephony/tenant-store";
 import { getCallSession, appendTranscript, executeTier2Fallback } from "@/lib/telephony/failover-engine";
 import { TwiMLBuilder } from "@/lib/telephony/twiml-builder";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
+import { verifyTwilioWebhook } from "@/lib/telephony/security";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,13 @@ export async function POST(req: NextRequest) {
   let dialStatus = "completed";
   try {
     const bodyParams = await parseTelephonyRequestBody(req);
+
+    const sigCheck = verifyTwilioWebhook(req, bodyParams);
+    if (!sigCheck.valid) {
+      console.warn(`[Voice Transfer Status] Rejected webhook: ${sigCheck.reason}`);
+      return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+    }
+
     dialStatus = bodyParams.DialCallStatus || "completed";
   } catch {
     // default to completed
