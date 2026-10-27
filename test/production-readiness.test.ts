@@ -378,15 +378,29 @@ describe("Production Readiness & Security Hardening Test Suite", () => {
   // 8. Canonical Webhook URL Resolution
   // ============================================================================
   test("Canonical Webhook URL: Correctly handles reverse proxies and multi-hop forward headers", () => {
-    const reqWithProxy = new NextRequest("http://internal-cluster:3000/api/voice/incoming?tenantId=clinic-1", {
-      headers: {
-        "x-forwarded-proto": "https, http",
-        "x-forwarded-host": "vaniedge.vercel.app, proxy.internal",
-      },
-    });
+    const prevAppUrl = process.env.APP_URL;
+    const prevPublicUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const prevCanonicalUrl = process.env.CANONICAL_URL;
 
-    const canonical = getCanonicalWebhookUrl(reqWithProxy);
-    assert.equal(canonical, "https://vaniedge.vercel.app/api/voice/incoming?tenantId=clinic-1");
+    try {
+      delete process.env.APP_URL;
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      delete process.env.CANONICAL_URL;
+
+      const reqWithProxy = new NextRequest("http://internal-cluster:3000/api/voice/incoming?tenantId=clinic-1", {
+        headers: {
+          "x-forwarded-proto": "https, http",
+          "x-forwarded-host": "vaniedge.vercel.app, proxy.internal",
+        },
+      });
+
+      const canonical = getCanonicalWebhookUrl(reqWithProxy);
+      assert.equal(canonical, "https://vaniedge.vercel.app/api/voice/incoming?tenantId=clinic-1");
+    } finally {
+      process.env.APP_URL = prevAppUrl;
+      process.env.NEXT_PUBLIC_APP_URL = prevPublicUrl;
+      process.env.CANONICAL_URL = prevCanonicalUrl;
+    }
   });
 
   // ============================================================================
