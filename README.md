@@ -99,8 +99,10 @@ While physical PSTN carrier disconnects (such as cellular coverage loss, dead zo
 ### 4. Rate Limiting & Input Validation
 - Edge/serverless sliding-window rate limiters protect sensitive endpoints:
   - Auth routes (`/api/auth/signin`, `/api/auth/signup`): 5 requests / minute per IP.
-  - Chat & RAG routes (`/api/chat`, `/api/query`): 30 requests / minute per IP.
-  - Dispatch ticket creation (`/api/dispatch`): 20 requests / minute per IP.
+  - Chat route (`/api/chat`): 30 requests / minute per IP.
+  - RAG routes (`/api/query` query & ingestion): 60 requests / minute per IP.
+  - Dispatch ticket creation (`/api/dispatch`): 15 requests / minute per IP.
+  - Agency tenant management (`/api/agency/tenants`): 60 requests / minute per IP.
 - Client IPs are resolved securely using trusted proxy headers (`cf-connecting-ip`, `x-real-ip`, leftmost `x-forwarded-for`).
 - All incoming payloads are parsed and constrained using strict Zod schemas with character and array length limits.
 
@@ -174,10 +176,10 @@ DROP TABLE IF EXISTS vaniedge_users CASCADE;
 | Method | Endpoint | Description | Auth / Security |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/chat` | Customer web assistant conversation | Rate Limited (30/min), Length Bounded |
-| `POST` | `/api/query` | SutraDB RAG semantic document retrieval | Rate Limited (30/min), Fallback to Presets |
-| `PUT` | `/api/query` | Ingest knowledge chunk into RAG | `requireAuth()` (Tenant Scoped) |
-| `POST` | `/api/dispatch` | Create dispatch ticket & queue SMS | Rate Limited (20/min), Checksum Hashed |
-| `GET` | `/api/dispatch` | Query tenant dispatch tickets | `requireAuth()` (Tenant Scoped) |
+| `POST` | `/api/query` | SutraDB RAG semantic document retrieval | `requireAuth()`, Rate Limited (60/min), Zod Schema |
+| `PUT` | `/api/query` | Ingest knowledge chunk into RAG | `requireAuth()`, Rate Limited (60/min), Zod Schema |
+| `POST` | `/api/dispatch` | Create dispatch ticket & queue SMS | `requireAuth()` (CSRF Protected), Rate Limited (15/min), SHA Checksum |
+| `GET` | `/api/dispatch` | Query tenant dispatch tickets | `requireAuth()`, Tenant Scoped IDOR Protection |
 | `GET` | `/api/health` | Service health status & provider readiness | Masked Credentials, No Secret Leaks |
 | `GET` | `/api/metrics` | Telephony stage latency percentiles | Sanitized CallSIDs |
 
