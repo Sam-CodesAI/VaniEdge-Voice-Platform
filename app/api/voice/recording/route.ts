@@ -18,6 +18,7 @@ import {
 import { TwiMLBuilder } from "@/lib/telephony/twiml-builder";
 import { sendGmailMessage } from "@/lib/email/gmail";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
+import { verifyTwilioWebhook } from "@/lib/telephony/security";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const bodyParams = await parseTelephonyRequestBody(req);
+
+    const sigCheck = verifyTwilioWebhook(req, bodyParams);
+    if (!sigCheck.valid) {
+      console.warn(`[Voice Recording] Rejected webhook: ${sigCheck.reason}`);
+      return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+    }
+
     recordingUrl = bodyParams.RecordingUrl || "";
     recordingDuration = bodyParams.RecordingDuration || "0";
     transcriptionText = bodyParams.TranscriptionText || "";

@@ -5,10 +5,12 @@
  * Handles Twilio Call StatusCallbacks.
  * Monitors duration and disconnect reasons; triggers Tier 4 SMS Rescue
  * if call was dropped prematurely (<15s) or encountered a busy/failed state.
+ * Enforces cryptographic Twilio signature verification and replay idempotency.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantById } from "@/lib/telephony/tenant-store";
+import { verifyTwilioWebhook, checkEventDuplicate } from "@/lib/telephony/security";
 import {
   getCallSession,
   executeTier4SmsRescue,
@@ -25,19 +27,38 @@ export async function POST(req: NextRequest) {
   try {
     const bodyParams = await parseTelephonyRequestBody(req);
 
+    // 1. Enforce Twilio signature verification
+    const sigCheck = verifyTwilioWebhook(req, bodyParams);
+    if (!sigCheck.valid) {
+      console.warn(`[Voice Status] Rejected invalid signature: ${sigCheck.reason}`);
+      return NextResponse.json(
+        { error: "Unauthorized", reason: sigCheck.reason },
+        { status: sigCheck.statusCode || 401 }
+      );
+    }
+
     const parsed = TwilioStatusCallbackSchema.safeParse(bodyParams);
     const callSid = parsed.success ? parsed.data.CallSid : bodyParams.CallSid || "";
     const callStatus = parsed.success ? parsed.data.CallStatus : bodyParams.CallStatus || "completed";
     const durationSec = parseInt(bodyParams.CallDuration || bodyParams.Duration || "0", 10);
 
+    // 2. Replay & Duplicate Callback Protection
+    const eventKey = `status:${callSid}:${callStatus}:${durationSec}`;
+    const isDuplicate = checkEventDuplicate(eventKey);
+    if (isDuplicate) {
+      // Acknowledge with 200 OK so Twilio ceases retries without duplicate processing
+      return NextResponse.json({
+        status: "ok",
+        deduplicated: true,
+        callSid,
+      });
+    }
+
     const session = getCallSession(callSid);
     const tenantId = session?.tenantId || req.nextUrl.searchParams.get("tenantId") || "apex-hvac";
     const tenant = getTenantById(tenantId);
 
-    // 1. Detect Dropped Calls & Trigger Tier 4 SMS Rescue
-    // Criteria:
-    // a) Call status is busy, failed, or no-answer
-    // b) Call completed with duration under 15 seconds (caller abandoned or disconnected)
+    // 3. Detect Dropped Calls & Trigger Tier 4 SMS Rescue
     const isAborted = callStatus === "busy" || callStatus === "failed" || callStatus === "no-answer";
     const isShortDrop = callStatus === "completed" && durationSec < 15 && durationSec > 0;
 

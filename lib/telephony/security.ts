@@ -4,13 +4,87 @@
  * 
  * Implements strict Twilio HMAC-SHA1 verification and timing-safe comparisons
  * with zero external dependencies (Node.js native `crypto`).
+ * 
+ * - Fails closed if TWILIO_AUTH_TOKEN is missing in production
+ * - Resolves canonical external webhook URLs behind reverse proxies
+ * - Constant-time comparison mitigating timing side-channel attacks
+ * - Replay & duplicate event protection for status callbacks
  */
 
 import crypto from "crypto";
+import { NextRequest } from "next/server";
 
 export interface SignatureValidationResult {
   valid: boolean;
   reason?: string;
+  statusCode?: number;
+}
+
+// In-memory idempotency deduplication cache
+const PROCESSED_EVENTS = new Map<string, number>();
+
+// Clean up expired idempotency keys every 10 minutes
+if (typeof setInterval !== "undefined") {
+  const timer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, expires] of PROCESSED_EVENTS.entries()) {
+      if (now > expires) {
+        PROCESSED_EVENTS.delete(key);
+      }
+    }
+  }, 10 * 60 * 1000);
+  if (timer.unref) {
+    timer.unref();
+  }
+}
+
+/**
+ * Checks whether an event has already been processed to prevent duplicate executions.
+ * @returns true if event was already processed (duplicate), false if new
+ */
+export function checkEventDuplicate(eventId: string, ttlMs: number = 5 * 60 * 1000): boolean {
+  const now = Date.now();
+  const existing = PROCESSED_EVENTS.get(eventId);
+  if (existing && now <= existing) {
+    return true; // Duplicate
+  }
+  PROCESSED_EVENTS.set(eventId, now + ttlMs);
+  return false;
+}
+
+/**
+ * Resolves the canonical externally-visible webhook URL as requested by Twilio.
+ * Correctly accounts for reverse proxies, TLS termination, and configured canonical domains.
+ */
+export function getCanonicalWebhookUrl(req: NextRequest | Request): string {
+  const rawUrl = new URL(req.url);
+
+  // If explicit CANONICAL_URL or APP_URL is configured
+  const configuredAppUrl =
+    process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.CANONICAL_URL;
+  if (configuredAppUrl) {
+    try {
+      const base = new URL(configuredAppUrl);
+      rawUrl.protocol = base.protocol;
+      rawUrl.host = base.host;
+      return rawUrl.toString();
+    } catch {
+      // Fallback to header inspection
+    }
+  }
+
+  // Inspect trusted proxy headers
+  const proto = req.headers.get("x-forwarded-proto");
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+
+  if (proto) {
+    rawUrl.protocol = proto.endsWith(":") ? proto : `${proto}:`;
+  }
+  if (host) {
+    rawUrl.host = host;
+  }
+
+  return rawUrl.toString();
 }
 
 /**
@@ -32,9 +106,22 @@ export function validateTwilioSignature(params: {
   const { url, body, signature } = params;
   const token = params.authToken || process.env.TWILIO_AUTH_TOKEN;
 
+  // Fail closed if auth token missing
   if (!token) {
+    if (process.env.NODE_ENV === "production") {
+      return {
+        valid: false,
+        statusCode: 500,
+        reason: "TWILIO_AUTH_TOKEN is required in production but not configured.",
+      };
+    }
+    // In local dev without Twilio credentials
+    if (process.env.ALLOW_INSECURE_DEV_WEBHOOKS === "true") {
+      return { valid: true };
+    }
     return {
       valid: false,
+      statusCode: 500,
       reason: "TWILIO_AUTH_TOKEN is not configured on the server.",
     };
   }
@@ -42,6 +129,7 @@ export function validateTwilioSignature(params: {
   if (!signature) {
     return {
       valid: false,
+      statusCode: 401,
       reason: "Missing X-Twilio-Signature header in webhook request.",
     };
   }
@@ -69,6 +157,7 @@ export function validateTwilioSignature(params: {
     if (sigBuffer.length !== expectedBuffer.length) {
       return {
         valid: false,
+        statusCode: 401,
         reason: "Signature length mismatch.",
       };
     }
@@ -77,6 +166,7 @@ export function validateTwilioSignature(params: {
     if (!matches) {
       return {
         valid: false,
+        statusCode: 401,
         reason: "Signature verification failed. Potential spoofed request.",
       };
     }
@@ -86,13 +176,33 @@ export function validateTwilioSignature(params: {
     const errorMsg = err instanceof Error ? err.message : String(err);
     return {
       valid: false,
+      statusCode: 401,
       reason: `Signature calculation error: ${errorMsg}`,
     };
   }
 }
 
 /**
- * Helper to compute an authentic Twilio signature.
+ * Universal helper for verifying any Next.js Twilio voice webhook route.
+ */
+export function verifyTwilioWebhook(
+  req: NextRequest,
+  bodyParams: Record<string, string>,
+  explicitToken?: string
+): SignatureValidationResult {
+  const canonicalUrl = getCanonicalWebhookUrl(req);
+  const signature = req.headers.get("x-twilio-signature");
+
+  return validateTwilioSignature({
+    url: canonicalUrl,
+    body: bodyParams,
+    signature,
+    authToken: explicitToken,
+  });
+}
+
+/**
+ * Helper to compute an authentic Twilio signature (for testing and verification).
  */
 export function computeTwilioSignature(
   url: string,

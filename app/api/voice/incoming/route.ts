@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { validateTwilioSignature } from "@/lib/telephony/security";
+import { verifyTwilioWebhook } from "@/lib/telephony/security";
 import { getTenantByPhone } from "@/lib/telephony/tenant-store";
 import { createInboundGreetingTwiML } from "@/lib/telephony/twiml-builder";
 import { createCallSession, appendTranscript } from "@/lib/telephony/failover-engine";
@@ -22,24 +22,21 @@ export async function POST(req: NextRequest) {
     // 1. Universal body parsing (urlencoded, multipart, json)
     const bodyParams = await parseTelephonyRequestBody(req);
 
-    // 2. Validate payload schema
+    // 2. Validate Twilio cryptographic signature strictly
+    const sigCheck = verifyTwilioWebhook(req, bodyParams);
+    if (!sigCheck.valid) {
+      console.warn(`[Voice Incoming] Rejected webhook: ${sigCheck.reason}`);
+      return NextResponse.json(
+        { error: "Unauthorized", reason: sigCheck.reason },
+        { status: sigCheck.statusCode || 401 }
+      );
+    }
+
+    // 3. Validate payload schema
     const parsedPayload = TwilioVoiceWebhookSchema.safeParse(bodyParams);
     const callSid = parsedPayload.success ? parsedPayload.data.CallSid : (bodyParams.CallSid || "");
     const dialedNumber = parsedPayload.success ? parsedPayload.data.To : (bodyParams.To || "");
     const callerNumber = parsedPayload.success ? parsedPayload.data.From : (bodyParams.From || "");
-
-    // 3. Validate Twilio cryptographic signature
-    const signature = req.headers.get("x-twilio-signature");
-    const sigCheck = validateTwilioSignature({
-      url: req.url,
-      body: bodyParams,
-      signature,
-    });
-
-    if (!sigCheck.valid) {
-      console.warn(`[Voice Incoming] Rejected invalid signature: ${sigCheck.reason}`);
-      return NextResponse.json({ error: "Invalid signature", reason: sigCheck.reason }, { status: 403 });
-    }
 
     // 4. Resolve multi-tenant profile
     const tenant = getTenantByPhone(dialedNumber);
@@ -56,7 +53,7 @@ export async function POST(req: NextRequest) {
     appendTranscript(
       session,
       "system",
-      `Call initiated with ${tenant.name} (${tenant.id}) from ${callerNumber || "Anonymous"}`
+      `Call initiated with tenant ${tenant.id}`
     );
 
     // 6. Build absolute URL for process handler
@@ -77,7 +74,7 @@ export async function POST(req: NextRequest) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Voice Incoming Error]: ${errorMsg}`);
 
-    // Fail-safe static TwiML so the call is never dropped silently
+    // Fail-safe static TwiML
     return new Response(
       `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Joanna-Neural">Thank you for calling. Our lines are currently experiencing high volume. Please leave your name and number right after the tone.</Say><Record maxLength="60" playBeep="true"/><Hangup/></Response>`,
       {

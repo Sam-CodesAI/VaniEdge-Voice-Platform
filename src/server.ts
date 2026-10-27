@@ -179,7 +179,7 @@ export function createVaniEdgeHandler(config: VaniEdgeServerConfig = {}) {
           );
         }
 
-        const ticket = dispatcher.createTicket(body);
+        const ticket = await dispatcher.createTicket(body);
         return new Response(JSON.stringify({ success: true, ticket }), {
           status: 201,
           headers: { "Content-Type": "application/json", ...corsHeaders },

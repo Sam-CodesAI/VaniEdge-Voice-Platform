@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SutraEdgeIndex, DEFAULT_KNOWLEDGE_PRESETS, DocumentEntry } from "@/lib/sutradb-engine";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export type PersonaCategory =
   | "clinic"
@@ -11,16 +12,38 @@ export type PersonaCategory =
   | "hospitality"
   | "general";
 
+export type RequestState = "inquiry" | "pending" | "confirmed" | "failed" | "requires_human";
+
 interface ChatRequestBody {
   message: string;
   persona?: PersonaCategory;
   language?: string; // en, hi, kn, ta, te, mr, es
   customDocuments?: DocumentEntry[];
   businessName?: string;
+  isDemo?: boolean;
 }
 
 export async function POST(req: NextRequest) {
+  const routeStartTime = performance.now();
+
   try {
+    // 1. Rate Limiting: 30 chat queries per 60 seconds per IP
+    const clientIp = getClientIp(req);
+    const rateCheck = checkRateLimit(clientIp, "chat", 30, 60 * 1000);
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { error: "Too many chat requests. Please slow down." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil(rateCheck.resetMs / 1000).toString(),
+            "X-RateLimit-Limit": rateCheck.limit.toString(),
+            "X-RateLimit-Remaining": rateCheck.remaining.toString(),
+          },
+        }
+      );
+    }
+
     const body = (await req.json()) as ChatRequestBody;
     const {
       message,
@@ -28,22 +51,37 @@ export async function POST(req: NextRequest) {
       language = "en",
       customDocuments = [],
       businessName = "Dr. Sharma's Clinic",
+      isDemo = false,
     } = body;
 
-    if (!message || typeof message !== "string") {
+    // 2. Strict Input Validation & Bounds
+    if (!message || typeof message !== "string" || message.trim().length === 0) {
       return NextResponse.json(
         { error: "Valid message string is required." },
         { status: 400 }
       );
     }
 
+    if (message.length > 2000) {
+      return NextResponse.json(
+        { error: "Message exceeds maximum allowed length of 2000 characters." },
+        { status: 400 }
+      );
+    }
+
+    // Bound custom documents count and length to prevent DoS
+    const boundedDocs = customDocuments.slice(0, 20).map((d) => ({
+      ...d,
+      content: typeof d.content === "string" ? d.content.slice(0, 5000) : "",
+    }));
+
     // Initialize SutraDB Edge Index with presets and custom user documents
-    const allDocs = [...customDocuments, ...DEFAULT_KNOWLEDGE_PRESETS];
+    const allDocs = [...boundedDocs, ...DEFAULT_KNOWLEDGE_PRESETS];
     const index = new SutraEdgeIndex(allDocs);
 
-    const startTime = performance.now();
+    const searchStartTime = performance.now();
     const searchResults = index.search(message, 3);
-    const retrievalLatencyMs = parseFloat((performance.now() - startTime).toFixed(2));
+    const retrievalLatencyMs = parseFloat((performance.now() - searchStartTime).toFixed(2));
 
     const topMatch = searchResults[0];
     const bestDocContent = topMatch && topMatch.fusedScore > 0.15 ? topMatch.document.content : null;
@@ -63,14 +101,18 @@ export async function POST(req: NextRequest) {
     const extractedEntities: Record<string, string> = {};
 
     // 1. Name Extraction
-    const nameMatch = message.match(/(?:my name is|i am|this is|caller is)\s+([A-Za-z]+(?:\s+(?!and\b|phone\b|with\b|for\b|at\b)[A-Za-z]+)?)/i) ||
-      message.match(/(?:नाम\s*(?:है)?|ಹೆಸರು)\s*[:=]?\s*([^\s,]+)/i);
+    const nameMatch =
+      message.match(
+        /(?:my name is|i am|this is|caller is)\s+([A-Za-z]+(?:\s+(?!and\b|phone\b|with\b|for\b|at\b)[A-Za-z]+)?)/i
+      ) || message.match(/(?:नाम\s*(?:है)?|ಹೆಸರು)\s*[:=]?\s*([^\s,]+)/i);
     if (nameMatch) {
       extractedEntities["callerName"] = nameMatch[1].trim();
     }
 
     // 2. Time & Date Extraction
-    const timeMatch = message.match(/(?:\b(?:at|on|for|around)\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\b(?:today|tomorrow|morning|evening|afternoon|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?)/i);
+    const timeMatch = message.match(
+      /(?:\b(?:at|on|for|around)\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\b(?:today|tomorrow|morning|evening|afternoon|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?)/i
+    );
     if (timeMatch && timeMatch[1]) {
       extractedEntities["scheduledTime"] = timeMatch[1].trim();
     }
@@ -181,7 +223,19 @@ export async function POST(req: NextRequest) {
       else detectedIntent = "BOOK_APPOINTMENT";
     }
 
-    // Dynamic Multi-Lingual Natural Generation
+    // Determine Honest Transaction State
+    let requestState: RequestState = "inquiry";
+    if (detectedIntent === "EMERGENCY_DISPATCH") {
+      requestState = "requires_human";
+    } else if (
+      detectedIntent === "BOOK_APPOINTMENT" ||
+      detectedIntent === "ORDER_FOOD" ||
+      detectedIntent === "HOTEL_RESERVATION"
+    ) {
+      requestState = "pending";
+    }
+
+    // Dynamic Multi-Lingual Generation based on Verified State
     let voiceResponse = "";
     const name = extractedEntities["callerName"] || "Customer";
     const time = extractedEntities["scheduledTime"] || "the earliest available slot";
@@ -190,38 +244,41 @@ export async function POST(req: NextRequest) {
     if (language.startsWith("hi")) {
       // Hindi (हिंदी)
       if (detectedIntent === "BOOK_APPOINTMENT") {
-        voiceResponse = `नमस्ते ${name}! ${businessName} में आपका अपॉइंटमेंट ${time} के लिए सफलतापूर्वक दर्ज कर लिया गया है। ${bestDocContent ? `संदर्भ: ${bestDocContent.slice(0, 100)}` : ""}`;
+        voiceResponse = `नमस्ते ${name}! ${businessName} में आपका अपॉइंटमेंट अनुरोध ${time} के लिए दर्ज कर लिया गया है। उपलब्धता की पुष्टि के लिए हमारा क्लिनिक प्रतिनिधि आपसे जल्द संपर्क करेगा। ${
+          bestDocContent ? `संदर्भ: ${bestDocContent.slice(0, 100)}` : ""
+        }`;
       } else if (detectedIntent === "ORDER_FOOD") {
-        voiceResponse = `नमस्ते ${name}! आपका ${items} का आर्डर प्राप्त हो गया है। हमारी रसोई से यह 30 मिनट में तैयार हो जाएगा।`;
+        voiceResponse = `नमस्ते ${name}! आपका ${items} का आर्डर अनुरोध प्राप्त हुआ है। हमारी टीम इसे सत्यापित कर रही है।`;
       } else if (detectedIntent === "EMERGENCY_DISPATCH") {
-        voiceResponse = `आपातकालीन सहायता सक्रिय कर दी गई है। हमारी बचाव टीम 20 मिनट में आपके पास पहुंच रही है। कृपया सुरक्षित रहें।`;
+        voiceResponse = `आपातकालीन सहायता अनुरोध दर्ज हुआ है। हम आपका कॉल तुरंत वरिष्ठ आपातकालीन समन्वयक को स्थानांतरित कर रहे हैं। कृपया लाइन पर बने रहें।`;
       } else if (detectedIntent === "RETAIL_SUPPORT") {
-        voiceResponse = `नमस्ते ${name}! आपके आर्डर और रिटर्न का विवरण दर्ज कर लिया गया है। ${bestDocContent ? `विवरण: ${bestDocContent.slice(0, 120)}` : ""}`;
+        voiceResponse = `नमस्ते ${name}! आपका सहायता अनुरोध दर्ज कर लिया गया है। ${
+          bestDocContent ? `विवरण: ${bestDocContent.slice(0, 120)}` : ""
+        }`;
       } else if (detectedIntent === "PROPERTY_INQUIRY") {
-        voiceResponse = `नमस्ते ${name}! प्रॉपर्टी विजिट और फ्लैट की जानकारी के लिए आपका अनुरोध दर्ज हो गया है। ${bestDocContent ? `विवरण: ${bestDocContent.slice(0, 120)}` : ""}`;
+        voiceResponse = `नमस्ते ${name}! प्रॉपर्टी विजिट और फ्लैट की जानकारी के लिए आपका अनुरोध दर्ज हो गया है। ${
+          bestDocContent ? `विवरण: ${bestDocContent.slice(0, 120)}` : ""
+        }`;
       } else if (detectedIntent === "BANKING_SERVICE") {
-        voiceResponse = `नमस्ते ${name}! आपकी बैंकिंग सेवा और खाता सुरक्षा अनुरोध प्रोसेस कर दिया गया है।`;
+        voiceResponse = `नमस्ते ${name}! आपकी बैंकिंग सेवा का अनुरोध दर्ज किया गया है।`;
       } else if (detectedIntent === "HOTEL_RESERVATION") {
-        voiceResponse = `नमस्ते ${name}! ${businessName} में आपका कमरा ${time} के लिए आरक्षित कर लिया गया है।`;
+        voiceResponse = `नमस्ते ${name}! ${businessName} में कमरा आरक्षण का अनुरोध ${time} के लिए प्राप्त हुआ है।`;
       } else if (bestDocContent) {
-        voiceResponse = `नमस्ते! हमारे रिकॉर्ड के अनुसार: ${bestDocContent.slice(0, 220)}। क्या मैं आपकी कुछ और मदद कर सकता हूँ?`;
+        voiceResponse = `नमस्ते! हमारे रिकॉर्ड के अनुसार: ${bestDocContent.slice(
+          0,
+          220
+        )}। क्या मैं आपकी कुछ और मदद कर सकता हूँ?`;
       } else {
         voiceResponse = `नमस्ते! ${businessName} के वॉयस असिस्टेंट में आपका स्वागत है। मैं आपकी क्या मदद कर सकता हूँ?`;
       }
     } else if (language.startsWith("kn")) {
       // Kannada (ಕನ್ನಡ)
       if (detectedIntent === "BOOK_APPOINTMENT") {
-        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ${businessName} ನಲ್ಲಿ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ${time} ಕ್ಕೆ ಕಾಯ್ದಿರಿಸಲಾಗಿದೆ. ದಯವಿಟ್ಟು 10 ನಿಮಿಷ ಮುಂಚಿತವಾಗಿ ಬನ್ನಿ.`;
+        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ${businessName} ನಲ್ಲಿ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ವಿನಂತಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ (${time}). ನಮ್ಮ ಪ್ರತಿನಿಧಿ ಶೀಘ್ರದಲ್ಲೇ ದೃಢೀಕರಿಸುತ್ತಾರೆ.`;
       } else if (detectedIntent === "ORDER_FOOD") {
-        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ನಿಮ್ಮ ${items} ಆರ್ಡರ್ ಸ್ವೀಕರಿಸಲಾಗಿದೆ. 30 ನಿಮಿಷಗಳಲ್ಲಿ ವಿತರಿಸಲಾಗುವುದು.`;
-      } else if (detectedIntent === "RETAIL_SUPPORT") {
-        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ನಿಮ್ಮ ಚಿಲ್ಲರೆ ಆದೇಶ ಮತ್ತು ರಿಟರ್ನ್ ವಿನಂತಿ ದಾಖಲಾಗಿದೆ.`;
-      } else if (detectedIntent === "PROPERTY_INQUIRY") {
-        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ಆಸ್ತಿ ವೀಕ್ಷಣೆ ಮತ್ತು ಅಪಾರ್ಟ್‌ಮೆಂಟ್ ವಿವರಗಳಿಗಾಗಿ ವಿನಂತಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ.`;
-      } else if (detectedIntent === "BANKING_SERVICE") {
-        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ನಿಮ್ಮ ಬ್ಯಾಂಕಿಂಗ್ ಸೇವೆಯ ವಿನಂತಿಯನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ದಾಖಲಿಸಲಾಗಿದೆ.`;
-      } else if (detectedIntent === "HOTEL_RESERVATION") {
-        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ${businessName} ನಲ್ಲಿ ಕೊಠಡಿ ಮೀಸಲಾತಿ ಖಚಿತಪಡಿಸಲಾಗಿದೆ.`;
+        voiceResponse = `ನಮಸ್ಕಾರ ${name}! ನಿಮ್ಮ ${items} ಆರ್ಡರ್ ವಿನಂತಿ ಸ್ವೀಕರಿಸಲಾಗಿದೆ.`;
+      } else if (detectedIntent === "EMERGENCY_DISPATCH") {
+        voiceResponse = `ತುರ್ತು ನೆರವು ವಿನಂತಿ ದಾಖಲಾಗಿದೆ. ತಕ್ಷಣ ತುರ್ತು ಪ್ರತಿನಿಧಿಯೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಲ್ಪಿಸಲಾಗುತ್ತಿದೆ.`;
       } else if (bestDocContent) {
         voiceResponse = `ನಮಸ್ಕಾರ! ನಮ್ಮ ದಾಖಲೆಗಳ ಪ್ರಕಾರ: ${bestDocContent.slice(0, 200)}.`;
       } else {
@@ -230,33 +287,24 @@ export async function POST(req: NextRequest) {
     } else if (language.startsWith("mr")) {
       // Marathi (मराठी)
       if (detectedIntent === "BOOK_APPOINTMENT") {
-        voiceResponse = `नमस्कार ${name}! ${businessName} मध्ये आपली अपॉइंटमेंट ${time} साठी नोंदवण्यात आली आहे.`;
+        voiceResponse = `नमस्कार ${name}! ${businessName} मध्ये आपली अपॉइंटमेंट विनंती ${time} साठी नोंदवण्यात आली आहे. आमचे प्रतिनिधी लवकरच पुष्टी करतील.`;
       } else if (detectedIntent === "ORDER_FOOD") {
-        voiceResponse = `नमस्कार ${name}! आपली ऑर्डर नोंदवली गेली आहे. 30 मिनिटांत डिलिव्हरी होईल.`;
-      } else if (detectedIntent === "RETAIL_SUPPORT") {
-        voiceResponse = `नमस्कार ${name}! आपली खरेदी आणि परतावा विनंती यशस्वीरीत्या नोंदवण्यात आली आहे.`;
-      } else if (detectedIntent === "PROPERTY_INQUIRY") {
-        voiceResponse = `नमस्कार ${name}! मालमत्ता पाहणीसाठी आपली विनंती नोंदवली आहे.`;
+        voiceResponse = `नमस्कार ${name}! आपली ऑर्डर विनंती नोंदवली गेली आहे.`;
+      } else if (detectedIntent === "EMERGENCY_DISPATCH") {
+        voiceResponse = `तातडीची मदत विनंती नोंदवली गेली आहे. कृपया फोनवर थांबा, आपत्कालीन टीमशी जोडत आहोत.`;
       } else if (bestDocContent) {
         voiceResponse = `नमस्कार! माहितीनुसार: ${bestDocContent.slice(0, 200)}.`;
       } else {
         voiceResponse = `नमस्कार! ${businessName} मध्ये आपले स्वागत आहे. मी आपल्याला कशी मदत करू?`;
       }
-    } else if (language.startsWith("ta")) {
-      // Tamil (தமிழ்)
-      voiceResponse = bestDocContent
-        ? `வணக்கம்! தகவல்: ${bestDocContent.slice(0, 200)}.`
-        : `வணக்கம்! ${businessName} க்கு வரவேற்கிறோம். நான் உங்களுக்கு எவ்வாறு உதவ முடியும்?`;
     } else if (language.startsWith("es")) {
       // Spanish (Español)
       if (detectedIntent === "BOOK_APPOINTMENT") {
-        voiceResponse = `¡Hola ${name}! Su cita en ${businessName} ha sido confirmada para ${time}.`;
+        voiceResponse = `¡Hola ${name}! Su solicitud de cita en ${businessName} ha sido registrada para ${time}. Un coordinador confirmará la disponibilidad en breve.`;
       } else if (detectedIntent === "ORDER_FOOD") {
-        voiceResponse = `¡Hola ${name}! Su pedido de comida ha sido confirmado y llegará en 30 minutos.`;
-      } else if (detectedIntent === "RETAIL_SUPPORT") {
-        voiceResponse = `¡Hola ${name}! Su consulta sobre el pedido y devolución ha sido registrada.`;
-      } else if (detectedIntent === "PROPERTY_INQUIRY") {
-        voiceResponse = `¡Hola ${name}! Su solicitud de visita a la propiedad ha sido programada con éxito.`;
+        voiceResponse = `¡Hola ${name}! Su pedido de comida ha sido enviado al restaurante para su verificación.`;
+      } else if (detectedIntent === "EMERGENCY_DISPATCH") {
+        voiceResponse = `Alerta de emergencia recibida. Conectándole de inmediato con un coordinador humano de emergencias.`;
       } else if (bestDocContent) {
         voiceResponse = `Hola, según nuestros registros: ${bestDocContent.slice(0, 200)}.`;
       } else {
@@ -265,60 +313,70 @@ export async function POST(req: NextRequest) {
     } else {
       // English (Default)
       if (detectedIntent === "BOOK_APPOINTMENT") {
-        voiceResponse = `Hello ${name}! I have successfully reserved your appointment at ${businessName} for ${time}. ${
+        voiceResponse = `Hello ${name}. I have registered your appointment request for ${businessName} for ${time}. A clinic coordinator will confirm your exact slot shortly. ${
           bestDocContent ? `Note: ${bestDocContent.slice(0, 110)}.` : ""
-        } A confirmation ticket has been dispatched.`;
+        }`;
       } else if (detectedIntent === "ORDER_FOOD") {
-        voiceResponse = `Order confirmed for ${name}: ${items}. Kitchen preparation has started and your delivery will arrive in approximately 30 minutes.`;
+        voiceResponse = `Order request received for ${name}: ${items}. The request has been submitted to the kitchen for preparation confirmation.`;
       } else if (detectedIntent === "EMERGENCY_DISPATCH") {
-        voiceResponse = `Emergency Dispatch Alert: An emergency recovery crew has been dispatched to your location with an estimated arrival time of 18 minutes.`;
+        voiceResponse = `Emergency assistance requested. Transferring your request to our senior emergency dispatcher immediately. Please remain on the line.`;
       } else if (detectedIntent === "RETAIL_SUPPORT") {
-        voiceResponse = `Hello ${name}! I have accessed your retail support request. ${
+        voiceResponse = `Hello ${name}! I have logged your retail support inquiry. ${
           bestDocContent ? `Policy details: ${bestDocContent.slice(0, 140)}.` : ""
-        } Your return or tracking ticket is logged.`;
+        } An agent will follow up with your ticket reference.`;
       } else if (detectedIntent === "PROPERTY_INQUIRY") {
-        voiceResponse = `Hello ${name}! Thank you for your interest in ${businessName}. ${
+        voiceResponse = `Hello ${name}! Thank you for your inquiry regarding ${businessName}. ${
           bestDocContent ? `Listing summary: ${bestDocContent.slice(0, 140)}.` : ""
-        } A viewing tour has been scheduled.`;
+        } A viewing tour request has been noted.`;
       } else if (detectedIntent === "BANKING_SERVICE") {
-        voiceResponse = `Hello ${name}! Your banking inquiry has been verified under secure edge protocol. ${
-          bestDocContent ? `Verified terms: ${bestDocContent.slice(0, 140)}.` : ""
+        voiceResponse = `Hello ${name}! Your banking inquiry has been logged. ${
+          bestDocContent ? `Policy details: ${bestDocContent.slice(0, 140)}.` : ""
         }`;
       } else if (detectedIntent === "HOTEL_RESERVATION") {
         voiceResponse = `Hello ${name}! Your reservation request at ${businessName} is received for ${time}. ${
           bestDocContent ? `Amenities: ${bestDocContent.slice(0, 140)}.` : ""
-        } We look forward to hosting you.`;
+        } A reservations associate will confirm room availability.`;
       } else if (detectedIntent === "PRICE_INQUIRY" && bestDocContent) {
         voiceResponse = `According to verified records: ${bestDocContent.slice(0, 230)}.`;
       } else if (bestDocContent) {
-        voiceResponse = `Based on our verified records: ${bestDocContent.slice(0, 240)}. Would you like me to book or reserve this for you?`;
+        voiceResponse = `Based on our verified records: ${bestDocContent.slice(
+          0,
+          240
+        )}. Would you like me to submit an inquiry or booking request for you?`;
       } else {
         voiceResponse = `Hello! Welcome to ${businessName} Voice Telephony. How may I assist you today?`;
       }
     }
 
+    if (isDemo) {
+      voiceResponse = `[Demo Simulation] ${voiceResponse}`;
+    }
+
+    const totalRoundtripMs = parseFloat((performance.now() - routeStartTime).toFixed(1));
+
     return NextResponse.json({
       success: true,
       voiceResponse,
       intent: detectedIntent,
+      requestState,
+      isSimulated: isDemo,
       entities: extractedEntities,
       retrieval: {
         latencyMs: retrievalLatencyMs,
-        matchedDocument: topMatch && topMatch.fusedScore > 0.1
-          ? {
-              id: topMatch.document.id,
-              title: topMatch.document.title,
-              fusedScore: parseFloat(topMatch.fusedScore.toFixed(3)),
-              matchedTerms: topMatch.matchedTerms,
-            }
-          : null,
+        matchedDocument:
+          topMatch && topMatch.fusedScore > 0.1
+            ? {
+                id: topMatch.document.id,
+                title: topMatch.document.title,
+                fusedScore: parseFloat(topMatch.fusedScore.toFixed(3)),
+                matchedTerms: topMatch.matchedTerms,
+              }
+            : null,
       },
       telemetry: {
-        edgeAuthMs: 14.2,
         sutraDbLatencyMs: retrievalLatencyMs,
-        speechSynthesisTimeMs: 165.4,
-        totalRoundtripMs: parseFloat((179.6 + retrievalLatencyMs).toFixed(1)),
-        failoverWatchdogSafe: true,
+        totalRoundtripMs,
+        requestState,
       },
     });
   } catch (err: unknown) {

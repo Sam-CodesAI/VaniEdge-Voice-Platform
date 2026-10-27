@@ -1,32 +1,34 @@
 import { NextResponse } from "next/server";
+import { isSupabaseConfigured } from "@/lib/supabase-client";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const hasTwilio = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
-  const hasElevenLabs = Boolean(process.env.ELEVENLABS_API_KEY);
+  const hasElevenLabs = Boolean(process.env.ELEVENLABS_API_KEY || process.env.ELEVENLABS_AGENT_ID);
+  const isHealthy = hasTwilio && hasElevenLabs;
 
   return NextResponse.json({
     service: "VaniEdge Voice Platform",
     version: "1.2.0",
-    status: "healthy",
+    status: isHealthy ? "healthy" : "degraded",
     timestamp: new Date().toISOString(),
     providers: {
       twilio: {
         configured: hasTwilio,
-        phoneNumber: process.env.TWILIO_PHONE_NUMBER ? "configured" : "carrier-trunk-ready",
       },
       elevenlabs: {
         configured: hasElevenLabs,
       },
       sutradb: {
-        status: "postgres-vector-ready",
-        embeddingDim: 64,
-        indicSupport: true,
+        configured: true,
+        mode: isSupabaseConfigured ? "postgres_hybrid" : "local_edge_index",
       },
     },
     failoverSla: {
-      connectionTimeoutMs: 1200,
-      ttftTimeoutMs: 1500,
-      zeroDroppedCalls: true,
+      targetConnectionTimeoutMs: 1200,
+      targetTtftTimeoutMs: 1500,
+      architecture: "Sub-second edge watchdog with multi-tier carrier fallback",
     },
   });
 }

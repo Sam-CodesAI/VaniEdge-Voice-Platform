@@ -11,7 +11,9 @@
     "build:ts": "tsc -p tsconfig.build.json",
     "deploy:worker": "wrangler deploy",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check:env": "tsx scripts/check-env.ts"
   },
   "keywords": [
     "voice-ai",

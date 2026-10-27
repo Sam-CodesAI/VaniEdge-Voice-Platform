@@ -1,33 +1,37 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { authDb } from "@/lib/auth-store";
+import { requireAuth } from "@/lib/auth-guard";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
-export async function POST(req: Request) {
+export const dynamic = "force-dynamic";
+
+export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization");
-    let token: string | undefined;
+    const { auth, errorResponse } = await requireAuth(req, {
+      allowApiKey: true,
+      checkCsrf: true,
+    });
 
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.slice(7).trim();
+    if (errorResponse) {
+      return errorResponse;
     }
 
-    if (!token) {
-      const cookieHeader = req.headers.get("cookie") || "";
-      const match = cookieHeader.match(/vaniedge_session=([^;]+)/);
-      if (match) {
-        token = match[1];
-      }
+    const clientIp = getClientIp(req);
+    const rateCheck = checkRateLimit(`${clientIp}:${auth!.user.id}`, "rotate_creds", 5, 60 * 1000);
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { error: "Too many rotation requests. Please wait before rotating keys again." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil(rateCheck.resetMs / 1000).toString(),
+          },
+        }
+      );
     }
 
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized. Valid session token required." }, { status: 401 });
-    }
-
-    const user = authDb.getSessionUser(token);
-    if (!user) {
-      return NextResponse.json({ error: "Session expired or invalid." }, { status: 401 });
-    }
-
-    const newCredentials = authDb.rotateApiKey(user.id);
+    // Always derive user ID from verified authentication context, NEVER client request body
+    const newCredentials = await authDb.rotateApiKey(auth!.user.id);
 
     return NextResponse.json(
       {

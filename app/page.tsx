@@ -113,11 +113,14 @@ export default function VaniEdgePage() {
     }
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    try {
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch (err) {
+      console.warn("Signout request failed:", err);
+    }
     if (typeof window !== "undefined") {
       localStorage.removeItem("vaniedge_auth_user");
-      localStorage.removeItem("vaniedge_session_token");
-      document.cookie = "vaniedge_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;";
     }
     setCurrentUser(null);
     setUserDropdownOpen(false);
@@ -981,11 +984,8 @@ export default function VaniEdgePage() {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialMode={authModalMode}
-        onAuthSuccess={(user, token) => {
+        onAuthSuccess={(user) => {
           setCurrentUser(user);
-          if (token && typeof window !== "undefined") {
-            localStorage.setItem("vaniedge_session_token", token);
-          }
         }}
       />
 

@@ -1,0 +1,62 @@
+name: VaniEdge CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'fix/**'
+  pull_request:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Typecheck, Test & Build
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+      TWILIO_AUTH_TOKEN: ci_twilio_auth_token_32chars_long!
+      TWILIO_PHONE_NUMBER: +18149613703
+      SESSION_SECRET: ci_session_secret_at_least_32_characters_long_for_security_12345
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Environment Pre-Flight Check
+        run: pnpm check:env
+
+      - name: TypeScript Static Typecheck
+        run: pnpm typecheck
+
+      - name: Cloudflare Worker Compilation
+        run: pnpm build:ts
+
+      - name: Automated Test Suite (TDD / Unit / Regression)
+        run: pnpm test
+
+      - name: Next.js Production Build
+        run: pnpm build

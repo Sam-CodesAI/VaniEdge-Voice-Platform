@@ -28,4 +28,6 @@ export interface Env {
 
   // Environment & Security
   ENVIRONMENT?: string;
+  ALLOW_INSECURE_DEV_WEBHOOKS?: string;
+  WORKER_API_KEY?: string;
 }

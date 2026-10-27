@@ -9,10 +9,46 @@
 import { CallSession, CallPhase, TenantProfile } from "./types";
 import { createVoicemailRecordingTwiML, createEmergencyTransferTwiML } from "./twiml-builder";
 import { sendSmsRescue } from "./sms-service";
-import { supabase } from "@/lib/supabase-client";
+import fs from "node:fs";
+import path from "node:path";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase-client";
 
 // In-memory active session cache (survives warm serverless invocations)
 const ACTIVE_SESSIONS = new Map<string, CallSession>();
+const DISK_SESSIONS_PATH = path.join(process.cwd(), ".data", "call_sessions.json");
+let sessionsLoaded = false;
+
+function loadSessionsFromDisk(): void {
+  if (sessionsLoaded) return;
+  try {
+    if (fs.existsSync(DISK_SESSIONS_PATH)) {
+      const raw = fs.readFileSync(DISK_SESSIONS_PATH, "utf-8");
+      const list = JSON.parse(raw) as CallSession[];
+      if (Array.isArray(list)) {
+        for (const s of list) {
+          ACTIVE_SESSIONS.set(s.callSid, s);
+        }
+      }
+    }
+  } catch {
+    // Ignore
+  }
+  sessionsLoaded = true;
+}
+
+function saveSessionsToDisk(): void {
+  try {
+    const dir = path.dirname(DISK_SESSIONS_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      DISK_SESSIONS_PATH,
+      JSON.stringify(Array.from(ACTIVE_SESSIONS.values()), null, 2),
+      "utf-8"
+    );
+  } catch {
+    // Ignore
+  }
+}
 
 /**
  * Creates and initializes a new call session.
@@ -41,6 +77,7 @@ export function createCallSession(params: {
   };
 
   ACTIVE_SESSIONS.set(params.callSid, session);
+  saveSessionsToDisk();
   return session;
 }
 
@@ -48,6 +85,7 @@ export function createCallSession(params: {
  * Retrieve an active call session by CallSid.
  */
 export function getCallSession(callSid: string): CallSession | undefined {
+  loadSessionsFromDisk();
   return ACTIVE_SESSIONS.get(callSid);
 }
 
@@ -65,6 +103,7 @@ export function transitionCallPhase(
     Object.assign(session, updates);
   }
   ACTIVE_SESSIONS.set(session.callSid, session);
+  saveSessionsToDisk();
   return session;
 }
 
@@ -83,34 +122,51 @@ export function appendTranscript(
   });
   session.updatedAt = Date.now();
   ACTIVE_SESSIONS.set(session.callSid, session);
+  saveSessionsToDisk();
   return session;
 }
 
 /**
- * Asynchronously persist session details to Supabase (non-blocking).
+ * Asynchronously persist session details to durable purpose-built call_sessions database table.
  */
-export async function persistSessionToDatabase(session: CallSession): Promise<void> {
-  try {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      console.warn(`[FailoverEngine] NEXT_PUBLIC_SUPABASE_URL not configured. Cannot persist session ${session.callSid}.`);
-      return;
-    }
+export async function persistSessionToDatabase(session: CallSession): Promise<{ success: boolean; error?: string }> {
+  // Ensure resilient local durable disk snapshot
+  saveSessionsToDisk();
 
-    const { error } = await supabase.from("site_settings").upsert(
+  if (!isSupabaseConfigured) {
+    return { success: true };
+  }
+
+  try {
+    const { error } = await supabase.from("call_sessions").upsert(
       {
-        key: `call_session_${session.callSid}`,
-        value: session,
+        call_sid: session.callSid,
+        tenant_id: session.tenantId,
+        from_number: session.from,
+        to_number: session.to,
+        direction: session.direction,
+        phase: session.phase,
+        transcript: session.transcript,
+        latency_ms: session.latencyMs,
+        recording_url: session.recordingUrl || null,
+        failover_triggered: Boolean(session.failoverTriggered),
+        failover_reason: session.failoverReason || null,
+        sms_rescue_sent: Boolean(session.smsRescueSent),
         updated_at: new Date().toISOString(),
-        is_public: false,
       },
-      { onConflict: "key" }
+      { onConflict: "call_sid" }
     );
 
     if (error) {
-      console.error(`[FailoverEngine] Supabase error persisting session ${session.callSid}: ${error.message}`);
+      console.error(`[FailoverEngine] Failed to persist call session ${session.callSid} to 'call_sessions' table:`, error.message);
+      return { success: false, error: error.message };
     }
+
+    return { success: true };
   } catch (err) {
-    console.error(`[FailoverEngine] Failed to persist session ${session.callSid} to DB:`, err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[FailoverEngine] Could not persist session ${session.callSid} to DB:`, msg);
+    return { success: false, error: msg };
   }
 }
 

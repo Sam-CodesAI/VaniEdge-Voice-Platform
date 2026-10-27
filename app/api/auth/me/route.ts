@@ -1,33 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { authDb } from "@/lib/auth-store";
+import { requireAuth } from "@/lib/auth-guard";
 
-export async function GET(req: Request) {
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization");
-    let token: string | undefined;
-
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.slice(7).trim();
+    const { auth, errorResponse } = await requireAuth(req);
+    if (errorResponse) {
+      return errorResponse;
     }
 
-    if (!token) {
-      const cookieHeader = req.headers.get("cookie") || "";
-      const match = cookieHeader.match(/vaniedge_session=([^;]+)/);
-      if (match) {
-        token = match[1];
-      }
-    }
-
-    if (!token) {
-      return NextResponse.json({ error: "No active session." }, { status: 401 });
-    }
-
-    const user = authDb.getSessionUser(token);
-    if (!user) {
-      return NextResponse.json({ error: "Session expired or invalid." }, { status: 401 });
-    }
-
-    const safeUser = authDb.safeUser(user);
+    const safeUser = authDb.safeUser(auth!.user);
     return NextResponse.json({ user: safeUser }, { status: 200 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal error.";

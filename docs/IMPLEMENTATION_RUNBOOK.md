@@ -113,7 +113,7 @@ curl -X PUT https://vaniedge.vercel.app/api/query \
 
 ## 🛡️ Step 4: Telephony Failover Watchdog & Human Forwarding (5 Mins)
 
-Configure the zero-dropped-calls watchdog invariants in `wrangler.toml` or edge environment:
+Configure the resilient failover watchdog invariants in `wrangler.toml` or edge environment:
 
 ```toml
 [vars]

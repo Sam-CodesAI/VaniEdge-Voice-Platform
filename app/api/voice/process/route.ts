@@ -9,6 +9,7 @@
 import { NextRequest } from "next/server";
 import { getTenantById } from "@/lib/telephony/tenant-store";
 import { classifyWithAi } from "@/lib/telephony/intent-classifier";
+import { verifyTwilioWebhook } from "@/lib/telephony/security";
 import {
   createCallSession,
   getCallSession,
@@ -31,6 +32,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const bodyParams = await parseTelephonyRequestBody(req);
+
+    const sigCheck = verifyTwilioWebhook(req, bodyParams);
+    if (!sigCheck.valid) {
+      console.warn(`[Voice Process] Rejected webhook: ${sigCheck.reason}`);
+      return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+    }
 
     const parsed = TwilioVoiceWebhookSchema.safeParse(bodyParams);
     if (parsed.success) {
