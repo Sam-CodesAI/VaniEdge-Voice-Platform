@@ -70,8 +70,11 @@ export function checkRateLimit(
   maxRequests: number = 20,
   windowMs: number = 60 * 1000
 ): RateLimitResult {
-  // If explicitly disabled in dev/test via env
-  if (process.env.RATE_LIMIT_ENABLED === "false" || process.env.NODE_ENV === "test") {
+  // If explicitly disabled in dev/test via env (unless RATE_LIMIT_ENABLED === "true")
+  if (
+    process.env.RATE_LIMIT_ENABLED === "false" ||
+    (process.env.NODE_ENV === "test" && process.env.RATE_LIMIT_ENABLED !== "true")
+  ) {
     return {
       success: true,
       limit: maxRequests,
