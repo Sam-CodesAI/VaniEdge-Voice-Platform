@@ -10,6 +10,7 @@ const CreateTenantSchema = z.object({
   category: z.string().min(1).max(50).default("general"),
   brandColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
   logoUrl: z.string().url().max(500).optional(),
+  twilioPhone: z.string().regex(/^\+[1-9]\d{1,14}$/).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -47,29 +48,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, category, brandColor, logoUrl } = parseResult.data;
+    const { name, category, brandColor, logoUrl, twilioPhone } = parseResult.data;
 
-    // 2. Generate cryptographically safe tenant ID and telephone routing
+    // 2. Generate cryptographically safe tenant ID
     const newId = `tnt_${Math.random().toString(36).substring(2, 9)}`;
-    const phone = `+1 (${Math.floor(200 + Math.random() * 800)}) ${Math.floor(200 + Math.random() * 800)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // 3. Derive ownership strictly from authenticated user ID
+    // 3. Honest Carrier Provisioning:
+    // Only claim active telephone routing if a real verified E.164 number is provided.
+    // Never fabricate random fake numbers.
+    const isCarrierAssigned = Boolean(twilioPhone);
+    const assignedPhone = twilioPhone || "pending_carrier_assignment";
+    const initialStatus = isCarrierAssigned ? "active" : "provisioning";
+
+    // 4. Derive ownership strictly from authenticated user ID
     const tenant = await tenantStore.create({
       id: newId,
       ownerId: auth!.user.id,
       name,
       category,
       twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
-      twilioPhone: phone,
+      twilioPhone: assignedPhone,
       webhookUrl: `https://vaniedge.ai/api/voice/incoming?tenantId=${newId}`,
       monthlyCalls: 0,
-      status: "active",
+      status: initialStatus,
       brandColor,
       logoUrl,
     });
 
     const safe = tenantStore.safeTenant(tenant);
-    return NextResponse.json({ tenant: safe }, { status: 201 });
+    return NextResponse.json(
+      {
+        tenant: safe,
+        provisioningState: {
+          carrierConfirmed: isCarrierAssigned,
+          phoneAssigned: isCarrierAssigned,
+          status: initialStatus,
+          message: isCarrierAssigned
+            ? "Tenant provisioned with verified carrier phone number."
+            : "Tenant created in provisioning state. Live PSTN carrier number requires Twilio carrier assignment.",
+        },
+      },
+      { status: 201 }
+    );
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to provision tenant";
     return NextResponse.json({ error: msg }, { status: 500 });

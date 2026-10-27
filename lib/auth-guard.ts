@@ -39,7 +39,10 @@ function verifyCsrf(req: Request | NextRequest): boolean {
 
   const origin = req.headers.get("origin");
   const referer = req.headers.get("referer");
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const host =
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    (req.url ? new URL(req.url).host : null);
 
   if (!host) {
     return false;

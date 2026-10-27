@@ -70,7 +70,8 @@ async function parseParams(request: Request): Promise<Record<string, string>> {
 }
 
 /**
- * Validates Twilio webhook signatures strictly on Edge Workers, failing closed in production if secret missing.
+ * Validates Twilio webhook signatures strictly on Edge Workers, failing closed in all environments
+ * unless explicitly bypassed via ALLOW_INSECURE_DEV_WEBHOOKS=true in local development.
  */
 async function verifyTwilioWorkerSignature(
   request: Request,
@@ -78,37 +79,75 @@ async function verifyTwilioWorkerSignature(
   env: Env,
   url: URL
 ): Promise<{ valid: boolean; response?: Response }> {
-  const isProduction = env.ENVIRONMENT === 'production' || !url.hostname.includes('localhost');
-  if (isProduction && !env.TWILIO_AUTH_TOKEN) {
+  const allowDevBypass =
+    env.ALLOW_INSECURE_DEV_WEBHOOKS === 'true' && env.ENVIRONMENT !== 'production';
+
+  // 1. Fail closed if TWILIO_AUTH_TOKEN is missing or unconfigured
+  if (!env.TWILIO_AUTH_TOKEN) {
+    if (allowDevBypass) {
+      return { valid: true };
+    }
     return {
       valid: false,
-      response: new Response('Internal Server Error: TWILIO_AUTH_TOKEN required in production', { status: 500 }),
+      response: new Response(
+        'Internal Server Error: TWILIO_AUTH_TOKEN is missing or unconfigured. Inbound webhook rejected.',
+        { status: 500 }
+      ),
     };
   }
 
-  if (env.TWILIO_AUTH_TOKEN) {
-    const signatureHeader = request.headers.get('X-Twilio-Signature');
-    if (!signatureHeader) {
-      return {
-        valid: false,
-        response: new Response('Unauthorized: Missing Twilio Signature', { status: 401 }),
-      };
+  // 2. Reject if X-Twilio-Signature header is missing
+  const signatureHeader = request.headers.get('X-Twilio-Signature');
+  if (!signatureHeader) {
+    if (allowDevBypass) {
+      return { valid: true };
     }
-    const isValid = await validateTwilioSignature(
-      signatureHeader,
-      request.url,
-      params,
-      env.TWILIO_AUTH_TOKEN
-    );
-    if (!isValid) {
-      return {
-        valid: false,
-        response: new Response('Unauthorized: Invalid Twilio Signature', { status: 401 }),
-      };
-    }
+    return {
+      valid: false,
+      response: new Response('Unauthorized: Missing X-Twilio-Signature header', { status: 401 }),
+    };
+  }
+
+  // 3. Cryptographically verify HMAC-SHA1 signature
+  const isValid = await validateTwilioSignature(
+    signatureHeader,
+    request.url,
+    params,
+    env.TWILIO_AUTH_TOKEN
+  );
+  if (!isValid) {
+    return {
+      valid: false,
+      response: new Response('Unauthorized: Invalid Twilio Signature', { status: 401 }),
+    };
   }
 
   return { valid: true };
+}
+
+/**
+ * Validates Bearer API token on Worker administration endpoints.
+ */
+function verifyWorkerApiAuth(request: Request, env: Env): Response | null {
+  const authHeader = request.headers.get('Authorization') || '';
+  const expectedKey = env.WORKER_API_KEY || env.TWILIO_AUTH_TOKEN;
+  if (!expectedKey) {
+    if (env.ALLOW_INSECURE_DEV_WEBHOOKS === 'true' && env.ENVIRONMENT !== 'production') {
+      return null;
+    }
+    return new Response(JSON.stringify({ error: 'Worker API authentication is unconfigured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token || token !== expectedKey) {
+    return new Response(JSON.stringify({ error: 'Unauthorized: Valid Bearer token required' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return null;
 }
 
 export default {
@@ -346,6 +385,9 @@ export default {
 
     // Route: SutraDB Semantic RAG Search
     if (pathname === '/api/query' && method === 'POST') {
+      const authError = verifyWorkerApiAuth(request, env);
+      if (authError) return authError;
+
       try {
         const body = (await request.json()) as {
           query: string;
@@ -387,6 +429,9 @@ export default {
 
     // Route: Autonomous Ticket Creation & SMS Dispatch
     if (pathname === '/api/dispatch' && method === 'POST') {
+      const authError = verifyWorkerApiAuth(request, env);
+      if (authError) return authError;
+
       try {
         const body = (await request.json()) as TicketRequest;
         if (!body.callerName || !body.callerPhone || !body.category || !body.serviceType ||
@@ -399,7 +444,7 @@ export default {
           );
         }
 
-        const ticket = ticketDispatcher.createTicket(body);
+        const ticket = await ticketDispatcher.createTicket(body);
         return new Response(JSON.stringify({ success: true, ticket }), {
           status: 201,
           headers: { 'Content-Type': 'application/json' },
@@ -415,6 +460,9 @@ export default {
 
     // Route: Ticket Search & Filtering
     if (pathname === '/api/tickets' && method === 'GET') {
+      const authError = verifyWorkerApiAuth(request, env);
+      if (authError) return authError;
+
       const phone = url.searchParams.get('phone') || undefined;
       const category = url.searchParams.get('category') || undefined;
       const status = url.searchParams.get('status') || undefined;

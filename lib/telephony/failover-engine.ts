@@ -127,12 +127,15 @@ export function appendTranscript(
 }
 
 /**
- * Asynchronously persist session details to durable database.
+ * Asynchronously persist session details to durable purpose-built call_sessions database table.
  */
-export async function persistSessionToDatabase(session: CallSession): Promise<void> {
+export async function persistSessionToDatabase(session: CallSession): Promise<{ success: boolean; error?: string }> {
+  // Ensure resilient local durable disk snapshot
   saveSessionsToDisk();
 
-  if (!isSupabaseConfigured) return;
+  if (!isSupabaseConfigured) {
+    return { success: true };
+  }
 
   try {
     const { error } = await supabase.from("call_sessions").upsert(
@@ -146,25 +149,24 @@ export async function persistSessionToDatabase(session: CallSession): Promise<vo
         transcript: session.transcript,
         latency_ms: session.latencyMs,
         recording_url: session.recordingUrl || null,
+        failover_triggered: Boolean(session.failoverTriggered),
+        failover_reason: session.failoverReason || null,
+        sms_rescue_sent: Boolean(session.smsRescueSent),
         updated_at: new Date().toISOString(),
       },
       { onConflict: "call_sid" }
     );
 
     if (error) {
-      // Fallback to site_settings KV row
-      await supabase.from("site_settings").upsert(
-        {
-          key: `call_session_${session.callSid}`,
-          value: session,
-          updated_at: new Date().toISOString(),
-          is_public: false,
-        },
-        { onConflict: "key" }
-      );
+      console.error(`[FailoverEngine] Failed to persist call session ${session.callSid} to 'call_sessions' table:`, error.message);
+      return { success: false, error: error.message };
     }
+
+    return { success: true };
   } catch (err) {
-    console.warn(`[FailoverEngine] Could not persist session ${session.callSid} to DB:`, err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[FailoverEngine] Could not persist session ${session.callSid} to DB:`, msg);
+    return { success: false, error: msg };
   }
 }
 

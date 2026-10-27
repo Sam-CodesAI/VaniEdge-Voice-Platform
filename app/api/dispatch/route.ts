@@ -33,6 +33,13 @@ export async function GET(req: NextRequest) {
 
   // 2. Tenant isolation: regular users can only read tickets for their own tenant
   const isSuperAdmin = auth!.user.role === "admin";
+  if (requestedTenantId && !isSuperAdmin && requestedTenantId !== auth!.user.id) {
+    return NextResponse.json(
+      { error: "Forbidden: Cannot access tickets for another tenant" },
+      { status: 403 }
+    );
+  }
+
   const effectiveTenantId = isSuperAdmin ? requestedTenantId : auth!.user.id;
 
   let records = [];
@@ -62,7 +69,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Validate input schema
+    // 2. Enforce strict authentication & CSRF check
+    const { auth, errorResponse } = await requireAuth(req, { checkCsrf: true });
+    if (errorResponse) {
+      return errorResponse;
+    }
+
+    // 3. Validate input schema
     const rawBody = (await req.json()) as unknown;
     const parsed = CreateTicketSchema.safeParse(rawBody);
 
@@ -85,11 +98,19 @@ export async function POST(req: NextRequest) {
       isSimulated,
     } = parsed.data;
 
-    // Optional auth context attachment
-    const { auth } = await requireAuth(req).catch(() => ({ auth: undefined }));
-    const effectiveTenantId = auth?.user?.id || bodyTenantId || null;
+    // 4. Enforce tenant ownership: non-admin callers cannot create tickets under another tenant ID
+    const isSuperAdmin = auth!.user.role === "admin";
+    if (bodyTenantId && !isSuperAdmin && bodyTenantId !== auth!.user.id) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot dispatch tickets for another tenant" },
+        { status: 403 }
+      );
+    }
 
-    const record = dispatcher.createTicket({
+    const effectiveTenantId = isSuperAdmin ? (bodyTenantId || auth!.user.id) : auth!.user.id;
+
+    // 5. Await durable ticket creation in persistent storage
+    const record = await dispatcher.createTicket({
       callerName,
       callerPhone,
       category,
@@ -101,7 +122,21 @@ export async function POST(req: NextRequest) {
       isSimulated,
     });
 
-    return NextResponse.json({ success: true, ticket: record }, { status: 201 });
+    // 6. Honest state response: distinguish created vs dispatched states
+    return NextResponse.json(
+      {
+        success: true,
+        state: record.status.toLowerCase(),
+        dispatched: false,
+        externalProviderConfirmed: false,
+        ticket: record,
+        message:
+          record.status === "ESCALATED"
+            ? "Emergency request logged and escalated to human operator."
+            : "Ticket created in durable storage. Awaiting external provider dispatch confirmation.",
+      },
+      { status: 201 }
+    );
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Dispatch failed";
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

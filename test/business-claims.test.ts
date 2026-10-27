@@ -5,8 +5,8 @@ import { TicketDispatcher, generateSmsConfirmation } from "../src/dispatch/ticke
 test("Business Actions & Customer-Facing Claims Integrity Test Suite", async (t) => {
   const dispatcher = new TicketDispatcher();
 
-  await t.test("Requirement 1: Standard service tickets default to PENDING status", () => {
-    const ticket = dispatcher.createTicket({
+  await t.test("Requirement 1: Standard service tickets default to PENDING status", async () => {
+    const ticket = await dispatcher.createTicket({
       callerName: "Rahul Sharma",
       callerPhone: "+919876543210",
       category: "clinic",
@@ -20,8 +20,8 @@ test("Business Actions & Customer-Facing Claims Integrity Test Suite", async (t)
     assert.doesNotMatch(ticket.smsConfirmation, /confirmed/i);
   });
 
-  await t.test("Requirement 2: Emergency requests escalate to human without inventing arrival times", () => {
-    const emergencyTicket = dispatcher.createTicket({
+  await t.test("Requirement 2: Emergency requests escalate to human without inventing arrival times", async () => {
+    const emergencyTicket = await dispatcher.createTicket({
       callerName: "Vikram Mehta",
       callerPhone: "+919876543211",
       category: "auto",

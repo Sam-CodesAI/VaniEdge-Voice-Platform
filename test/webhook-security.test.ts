@@ -5,6 +5,8 @@ import {
   computeTwilioSignature,
   checkEventDuplicate,
 } from "../lib/telephony/security";
+import worker from "../src/worker";
+import type { Env } from "../src/types/env";
 
 test("Twilio Webhook Security Test Suite", async (t) => {
   const dummyAuthToken = "test_auth_token_secret_123456789";
@@ -123,5 +125,83 @@ test("Twilio Webhook Security Test Suite", async (t) => {
 
     const isDuplicate = checkEventDuplicate(eventKey, 5000);
     assert.equal(isDuplicate, true, "Second event with identical key must be flagged as duplicate");
+  });
+
+  await t.test("Requirement 8: Cloudflare Worker webhooks strictly fail closed without TWILIO_AUTH_TOKEN", async () => {
+    const dummyEnv: Env = {
+      TWILIO_ACCOUNT_SID: "ACtest000000000000000000000000000",
+      TWILIO_AUTH_TOKEN: "", // Missing auth token
+    };
+
+    // Inbound webhook
+    const incomingReq = new Request("https://edge.vaniedge.ai/voice/incoming", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=CA12345&From=%2B18005550100&To=%2B18149613703",
+    });
+    const incomingRes = await worker.fetch(incomingReq, dummyEnv, {} as any);
+    assert.equal(incomingRes.status, 500, "Worker inbound webhook must fail closed with 500 when TWILIO_AUTH_TOKEN is missing");
+
+    // Status callback
+    const statusReq = new Request("https://edge.vaniedge.ai/voice/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=CA12345&CallStatus=completed",
+    });
+    const statusRes = await worker.fetch(statusReq, dummyEnv, {} as any);
+    assert.equal(statusRes.status, 500, "Worker status callback must fail closed with 500 when TWILIO_AUTH_TOKEN is missing");
+
+    // Fallback webhook
+    const fallbackReq = new Request("https://edge.vaniedge.ai/voice/fallback", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=CA12345",
+    });
+    const fallbackRes = await worker.fetch(fallbackReq, dummyEnv, {} as any);
+    assert.equal(fallbackRes.status, 500, "Worker fallback webhook must fail closed with 500 when TWILIO_AUTH_TOKEN is missing");
+  });
+
+  await t.test("Requirement 9: Cloudflare Worker webhooks reject missing X-Twilio-Signature with 401", async () => {
+    const configuredEnv: Env = {
+      TWILIO_ACCOUNT_SID: "ACtest000000000000000000000000000",
+      TWILIO_AUTH_TOKEN: "valid_secret_token_1234567890",
+    };
+
+    const incomingReq = new Request("https://edge.vaniedge.ai/voice/incoming", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "CallSid=CA12345&From=%2B18005550100&To=%2B18149613703",
+    });
+    const incomingRes = await worker.fetch(incomingReq, configuredEnv, {} as any);
+    assert.equal(incomingRes.status, 401, "Worker must reject missing X-Twilio-Signature with 401 Unauthorized");
+  });
+
+  await t.test("Requirement 10: Worker administration endpoints require Bearer authentication", async () => {
+    const configuredEnv: Env = {
+      TWILIO_ACCOUNT_SID: "ACtest000000000000000000000000000",
+      TWILIO_AUTH_TOKEN: "valid_secret_token_1234567890",
+      WORKER_API_KEY: "secret_worker_admin_key_999",
+    };
+
+    // 1. Unauthenticated /api/dispatch must fail with 401
+    const unauthDispatch = new Request("https://edge.vaniedge.ai/api/dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callerName: "Test", callerPhone: "+18005551234", category: "clinic", serviceType: "Checkup" }),
+    });
+    const dispatchRes = await worker.fetch(unauthDispatch, configuredEnv, {} as any);
+    assert.equal(dispatchRes.status, 401, "Worker /api/dispatch must reject missing auth with 401");
+
+    // 2. Authenticated /api/dispatch succeeds
+    const authDispatch = new Request("https://edge.vaniedge.ai/api/dispatch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer secret_worker_admin_key_999",
+      },
+      body: JSON.stringify({ callerName: "Test", callerPhone: "+18005551234", category: "clinic", serviceType: "Checkup" }),
+    });
+    const authRes = await worker.fetch(authDispatch, configuredEnv, {} as any);
+    assert.equal(authRes.status, 201, "Worker /api/dispatch must succeed with valid Bearer token");
   });
 });

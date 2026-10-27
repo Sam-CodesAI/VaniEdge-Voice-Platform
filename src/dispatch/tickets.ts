@@ -74,15 +74,24 @@ export function generateSmsConfirmation(
     if (status === "ESCALATED") {
       return `${simPrefix}[वाणीEdge AI] आपातकालीन अनुरोध दर्ज: ${callerName} (${serviceType})। टिकट: ${ticketId}। समन्वयक को कॉल कनेक्ट किया जा रहा है।`;
     }
-    if (status === "CONFIRMED") {
-      return `${simPrefix}[वाणीEdge AI] टिकट ${ticketId}: ${callerName} के लिए ${serviceType} पुष्टि। संदर्भ: ${details || "मानक"}।`;
+    if (status === "DISPATCHED") {
+      return `${simPrefix}[वाणीEdge AI] सेवा प्रदाता पुष्टि व प्रस्थान: ${callerName} (${serviceType})। टिकट: ${ticketId}।`;
     }
-    return `${simPrefix}[वाणीEdge AI] अनुरोध प्राप्त: ${callerName} (${serviceType})। टिकट: ${ticketId}। उपलब्धता पुष्टि प्रक्रियाधीन।`;
+    if (status === "CONFIRMED") {
+      return `${simPrefix}[वाणीEdge AI] टिकट ${ticketId}: ${callerName} के लिए ${serviceType} पुष्टि। संदर्भ: ${details || "मानक"}। प्रदाता प्रेषण की प्रतीक्षा में।`;
+    }
+    return `${simPrefix}[वाणीEdge AI] अनुरोध प्राप्त: ${callerName} (${serviceType})। टिकट: ${ticketId}। समन्वयक पुष्टि प्रक्रियाधीन।`;
   }
 
   if (lang === "kn") {
     if (status === "ESCALATED") {
       return `${simPrefix}[ವಾಣಿEdge AI] ತುರ್ತು ವಿನಂತಿ ದಾಖಲಾಗಿದೆ: ${callerName} (${serviceType}). ಟಿಕೆಟ್: ${ticketId}. ಮಾನವ ಅಧಿಕಾರಿಗೆ ವರ್ಗಾಯಿಸಲಾಗಿದೆ.`;
+    }
+    if (status === "DISPATCHED") {
+      return `${simPrefix}[ವಾಣಿEdge AI] ಸೇವಾ ಪೂರೈಕೆದಾರರು ದೃಢೀಕರಿಸಿ ಹೊರಟಿದ್ದಾರೆ: ${callerName} (${serviceType}). ಟಿಕೆಟ್: ${ticketId}.`;
+    }
+    if (status === "CONFIRMED") {
+      return `${simPrefix}[ವಾಣಿEdge AI] ವಿನಂತಿ ದೃಢೀಕರಿಸಲಾಗಿದೆ: ${callerName} (${serviceType}). ಟಿಕೆಟ್: ${ticketId}. ನಿಯೋಜನೆ ಬಾಕಿ ಇದೆ.`;
     }
     return `${simPrefix}[ವಾಣಿEdge AI] ವಿನಂತಿ ದಾಖಲಾಗಿದೆ: ${callerName} (${serviceType}). ಟಿಕೆಟ್: ${ticketId}. ದೃಢೀಕರಣ ನಿರೀಕ್ಷೆಯಲ್ಲಿದೆ.`;
   }
@@ -91,8 +100,11 @@ export function generateSmsConfirmation(
     if (status === "ESCALATED") {
       return `${simPrefix}[VaniEdge AI] Solicitud prioritaria registrada para ${callerName} (${serviceType}). Ticket: ${ticketId}. Derivando a coordinador de guardia.`;
     }
+    if (status === "DISPATCHED") {
+      return `${simPrefix}[VaniEdge AI] Proveedor confirmado y despachado para ${callerName} (${serviceType}). Ticket: ${ticketId}.`;
+    }
     if (status === "CONFIRMED") {
-      return `${simPrefix}[VaniEdge AI] Confirmado: ${callerName} (${serviceType}). Ticket: ${ticketId}.`;
+      return `${simPrefix}[VaniEdge AI] Confirmado: ${callerName} (${serviceType}). Ticket: ${ticketId}. Pendiente de asignación externa.`;
     }
     return `${simPrefix}[VaniEdge AI] Solicitud recibida para ${callerName} (${serviceType}). Ticket: ${ticketId}. Pendiente de confirmación.`;
   }
@@ -101,8 +113,11 @@ export function generateSmsConfirmation(
   if (status === "ESCALATED") {
     return `${simPrefix}[VaniEdge AI] Priority emergency request logged for ${callerName} (${serviceType}). Ticket: ${ticketId}. Transferring directly to human coordinator.`;
   }
+  if (status === "DISPATCHED") {
+    return `${simPrefix}[VaniEdge AI] External provider confirmed & dispatched for ${callerName} (${serviceType}). Ticket: ${ticketId}.`;
+  }
   if (status === "CONFIRMED") {
-    return `${simPrefix}[VaniEdge AI] Request confirmed for ${callerName} (${serviceType}). Ticket: ${ticketId}. Details: ${details || "Processed"}.`;
+    return `${simPrefix}[VaniEdge AI] Request confirmed for ${callerName} (${serviceType}). Ticket: ${ticketId}. Details: ${details || "Processed"}. Awaiting provider dispatch.`;
   }
   return `${simPrefix}[VaniEdge AI] Request received for ${callerName} (${serviceType}). Ticket: ${ticketId}. Status: Pending coordinator confirmation.`;
 }
@@ -155,7 +170,7 @@ export class TicketDispatcher {
     }
   }
 
-  public createTicket(req: TicketRequest): TicketRecord {
+  public async createTicket(req: TicketRequest): Promise<TicketRecord> {
     this.loadFromDisk();
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const prefix = req.category.slice(0, 3).toUpperCase();
@@ -201,10 +216,10 @@ export class TicketDispatcher {
     this.tickets.set(ticketId, record);
     this.saveToDisk();
 
-    // Persist to Supabase if configured
+    // Persist to Supabase if configured and await write
     if (isSupabaseConfigured) {
-      Promise.resolve(
-        supabase.from("dispatch_tickets").insert([
+      try {
+        const { error } = await supabase.from("dispatch_tickets").insert([
           {
             tenant_id: record.tenant_id,
             ticket_id: record.ticketId,
@@ -217,9 +232,18 @@ export class TicketDispatcher {
             language: record.language,
             status: record.status,
             sms_confirmation: record.smsConfirmation,
+            checksum: record.checksum,
+            is_simulated: record.isSimulated,
+            metadata: record.metadata,
           },
-        ])
-      ).catch(() => {});
+        ]);
+
+        if (error) {
+          console.error(`[TicketDispatcher] Database insert failed for ticket ${ticketId}:`, error.message);
+        }
+      } catch (dbErr) {
+        console.error(`[TicketDispatcher] Supabase exception on ticket insert:`, dbErr);
+      }
     }
 
     return record;
@@ -230,7 +254,7 @@ export class TicketDispatcher {
     return this.tickets.get(ticketId);
   }
 
-  public updateTicketStatus(ticketId: string, status: TicketStatus, note?: string): boolean {
+  public async updateTicketStatus(ticketId: string, status: TicketStatus, note?: string): Promise<boolean> {
     this.loadFromDisk();
     const ticket = this.tickets.get(ticketId);
     if (!ticket) return false;
@@ -244,9 +268,18 @@ export class TicketDispatcher {
     this.saveToDisk();
 
     if (isSupabaseConfigured) {
-      Promise.resolve(
-        supabase.from("dispatch_tickets").update({ status }).eq("ticket_id", ticketId)
-      ).catch(() => {});
+      try {
+        const { error } = await supabase
+          .from("dispatch_tickets")
+          .update({ status, notes: ticket.notes, updated_at: new Date().toISOString() })
+          .eq("ticket_id", ticketId);
+
+        if (error) {
+          console.error(`[TicketDispatcher] Database status update failed for ticket ${ticketId}:`, error.message);
+        }
+      } catch (dbErr) {
+        console.error(`[TicketDispatcher] Supabase exception on status update:`, dbErr);
+      }
     }
 
     return true;

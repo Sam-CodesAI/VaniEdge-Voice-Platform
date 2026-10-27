@@ -37,6 +37,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 2. Strict Authentication
+    const { auth, errorResponse } = await requireAuth(request);
+    if (errorResponse) {
+      return errorResponse;
+    }
+
+    // 3. Schema validation
     const rawBody = (await request.json()) as unknown;
     const parseResult = QuerySchema.safeParse(rawBody);
 
@@ -48,6 +55,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { query, category, filter, topK, minScore, tenantId } = parseResult.data;
+
+    // 4. Strict Tenant Isolation: non-admins cannot query other tenants' knowledge
+    const isSuperAdmin = auth!.user.role === "admin";
+    if (tenantId && !isSuperAdmin && tenantId !== auth!.user.id) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot query documents belonging to another tenant" },
+        { status: 403 }
+      );
+    }
+
+    const effectiveTenantId = isSuperAdmin ? (tenantId || auth!.user.id) : auth!.user.id;
 
     const engine = new SutraHybridEngine();
 
@@ -65,7 +83,9 @@ export async function POST(request: NextRequest) {
     if (isSupabaseConfigured) {
       try {
         let queryBuilder = supabase.from("sutradb_knowledge").select("*");
-        if (tenantId) queryBuilder = queryBuilder.eq("tenant_id", tenantId);
+        if (effectiveTenantId) {
+          queryBuilder = queryBuilder.eq("tenant_id", effectiveTenantId);
+        }
 
         const { data: dbDocs } = await queryBuilder;
         if (dbDocs && Array.isArray(dbDocs)) {
@@ -125,8 +145,15 @@ export async function PUT(request: NextRequest) {
 
     const { title, content, category, metadata, tenantId: bodyTenantId } = parseResult.data;
 
-    // Scope tenant_id strictly to authenticated user unless super-admin
+    // Strict Tenant Isolation: scope tenant_id strictly to authenticated user unless super-admin
     const isSuperAdmin = auth!.user.role === "admin";
+    if (bodyTenantId && !isSuperAdmin && bodyTenantId !== auth!.user.id) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot ingest documents into another tenant's knowledge store" },
+        { status: 403 }
+      );
+    }
+
     const effectiveTenantId = isSuperAdmin ? bodyTenantId || auth!.user.id : auth!.user.id;
 
     const doc = {
@@ -178,6 +205,13 @@ export async function GET(request: NextRequest) {
   const requestedTenantId = searchParams.get("tenantId") || undefined;
 
   const isSuperAdmin = auth!.user.role === "admin";
+  if (requestedTenantId && !isSuperAdmin && requestedTenantId !== auth!.user.id) {
+    return NextResponse.json(
+      { error: "Forbidden: Cannot list documents belonging to another tenant" },
+      { status: 403 }
+    );
+  }
+
   const effectiveTenantId = isSuperAdmin ? requestedTenantId : auth!.user.id;
 
   if (isSupabaseConfigured) {
