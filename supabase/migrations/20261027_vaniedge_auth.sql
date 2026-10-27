@@ -75,11 +75,15 @@ CREATE TABLE IF NOT EXISTS dispatch_tickets (
   priority TEXT NOT NULL DEFAULT 'STANDARD' CHECK (priority IN ('STANDARD', 'URGENT', 'CRITICAL')),
   language TEXT NOT NULL DEFAULT 'en',
   sms_confirmation TEXT,
+  checksum TEXT,
+  is_simulated BOOLEAN NOT NULL DEFAULT FALSE,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_dispatch_tickets_tenant_id ON dispatch_tickets (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_dispatch_tickets_phone ON dispatch_tickets (caller_phone);
+CREATE INDEX IF NOT EXISTS idx_dispatch_tickets_checksum ON dispatch_tickets (checksum);
 
 -- 5. Call Sessions Table
 CREATE TABLE IF NOT EXISTS call_sessions (
@@ -92,13 +96,27 @@ CREATE TABLE IF NOT EXISTS call_sessions (
   transcript JSONB NOT NULL DEFAULT '[]'::jsonb,
   latency_ms JSONB NOT NULL DEFAULT '{}'::jsonb,
   recording_url TEXT,
+  failover_triggered BOOLEAN NOT NULL DEFAULT FALSE,
+  failover_reason TEXT,
+  sms_rescue_sent BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_call_sessions_tenant_id ON call_sessions (tenant_id);
 
--- 6. SutraDB Knowledge Documents Table
+-- 6. Distributed Idempotency & Webhook Deduplication Table
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+  key TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,
+  response JSONB,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires ON idempotency_keys (expires_at);
+
+-- 7. SutraDB Knowledge Documents Table
 CREATE TABLE IF NOT EXISTS sutradb_knowledge (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id TEXT,
@@ -117,6 +135,7 @@ ALTER TABLE vaniedge_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dispatch_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE call_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE idempotency_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sutradb_knowledge ENABLE ROW LEVEL SECURITY;
 
 -- Service Role full access policies (Backend Server execution with SUPABASE_SERVICE_ROLE_KEY)
@@ -154,6 +173,13 @@ BEGIN
     SELECT 1 FROM pg_policies WHERE tablename = 'call_sessions' AND policyname = 'service_role_manage_call_sessions'
   ) THEN
     CREATE POLICY service_role_manage_call_sessions ON call_sessions
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'idempotency_keys' AND policyname = 'service_role_manage_idempotency_keys'
+  ) THEN
+    CREATE POLICY service_role_manage_idempotency_keys ON idempotency_keys
       FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 

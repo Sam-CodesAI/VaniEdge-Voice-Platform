@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TicketDispatcher } from "@/src/dispatch/tickets";
 import { requireAuth } from "@/lib/auth-guard";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { isTenantOwnedByUser } from "@/lib/tenant-store";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -31,16 +32,17 @@ export async function GET(req: NextRequest) {
   const filter = searchParams.get("filter") || "all";
   const requestedTenantId = searchParams.get("tenantId") || undefined;
 
-  // 2. Tenant isolation: regular users can only read tickets for their own tenant
-  const isSuperAdmin = auth!.user.role === "admin";
-  if (requestedTenantId && !isSuperAdmin && requestedTenantId !== auth!.user.id) {
+  // 2. Tenant isolation: verify caller has access to the requested tenant
+  const userRole = auth!.user.role || "user";
+  const hasAccess = await isTenantOwnedByUser(requestedTenantId, auth!.user.id, userRole);
+  if (!hasAccess) {
     return NextResponse.json(
       { error: "Forbidden: Cannot access tickets for another tenant" },
       { status: 403 }
     );
   }
 
-  const effectiveTenantId = isSuperAdmin ? requestedTenantId : auth!.user.id;
+  const effectiveTenantId = requestedTenantId || (userRole === "admin" ? undefined : auth!.user.id);
 
   let records = [];
   if (filter === "all") {
@@ -99,15 +101,16 @@ export async function POST(req: NextRequest) {
     } = parsed.data;
 
     // 4. Enforce tenant ownership: non-admin callers cannot create tickets under another tenant ID
-    const isSuperAdmin = auth!.user.role === "admin";
-    if (bodyTenantId && !isSuperAdmin && bodyTenantId !== auth!.user.id) {
+    const userRole = auth!.user.role || "user";
+    const hasAccess = await isTenantOwnedByUser(bodyTenantId, auth!.user.id, userRole);
+    if (!hasAccess) {
       return NextResponse.json(
         { error: "Forbidden: Cannot dispatch tickets for another tenant" },
         { status: 403 }
       );
     }
 
-    const effectiveTenantId = isSuperAdmin ? (bodyTenantId || auth!.user.id) : auth!.user.id;
+    const effectiveTenantId = bodyTenantId || auth!.user.id;
 
     // 5. Await durable ticket creation in persistent storage
     const record = await dispatcher.createTicket({

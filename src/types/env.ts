@@ -30,4 +30,5 @@ export interface Env {
   ENVIRONMENT?: string;
   ALLOW_INSECURE_DEV_WEBHOOKS?: string;
   WORKER_API_KEY?: string;
+  PUBLIC_URL?: string;
 }

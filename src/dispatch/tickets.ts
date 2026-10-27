@@ -240,10 +240,24 @@ export class TicketDispatcher {
 
         if (error) {
           console.error(`[TicketDispatcher] Database insert failed for ticket ${ticketId}:`, error.message);
+          if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+            this.tickets.delete(ticketId);
+            this.saveToDisk();
+            throw new Error(`Failed to persist dispatch ticket to durable database: ${error.message}`);
+          }
         }
       } catch (dbErr) {
         console.error(`[TicketDispatcher] Supabase exception on ticket insert:`, dbErr);
+        if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+          this.tickets.delete(ticketId);
+          this.saveToDisk();
+          throw dbErr;
+        }
       }
+    } else if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+      this.tickets.delete(ticketId);
+      this.saveToDisk();
+      throw new Error("Durable database persistence is unconfigured in production");
     }
 
     return record;

@@ -87,7 +87,7 @@ export class TenantStore {
 
     if (isSupabaseConfigured) {
       try {
-        await supabase.from("tenants").upsert({
+        const { error } = await supabase.from("tenants").upsert({
           id: tenant.id,
           owner_id: tenant.ownerId || null,
           name: tenant.name,
@@ -101,9 +101,27 @@ export class TenantStore {
           brand_color: tenant.brandColor,
           created_at: tenant.createdAt,
         }, { onConflict: "id" });
+
+        if (error) {
+          console.error("[TenantStore] Database persist error:", error.message);
+          if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+            this.tenants.delete(tenant.id);
+            this.saveToDisk();
+            throw new Error(`Failed to persist tenant to durable database: ${error.message}`);
+          }
+        }
       } catch (err) {
         console.warn("[TenantStore] Supabase persist warning:", err);
+        if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+          this.tenants.delete(tenant.id);
+          this.saveToDisk();
+          throw err;
+        }
       }
+    } else if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+      this.tenants.delete(tenant.id);
+      this.saveToDisk();
+      throw new Error("Durable database persistence is unconfigured in production");
     }
 
     return tenant;
@@ -215,10 +233,27 @@ export class TenantStore {
         if (updates.brandColor !== undefined) dbUpdates.brand_color = updates.brandColor;
         if (updates.status !== undefined) dbUpdates.status = updates.status;
 
-        await supabase.from("tenants").update(dbUpdates).eq("id", id);
+        const { error } = await supabase.from("tenants").update(dbUpdates).eq("id", id);
+        if (error) {
+          console.error("[TenantStore] Supabase update failed:", error.message);
+          if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+            this.tenants.set(id, existing);
+            this.saveToDisk();
+            throw new Error(`Failed to update tenant in durable database: ${error.message}`);
+          }
+        }
       } catch (err) {
         console.warn("[TenantStore] Supabase update warning:", err);
+        if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+          this.tenants.set(id, existing);
+          this.saveToDisk();
+          throw err;
+        }
       }
+    } else if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+      this.tenants.set(id, existing);
+      this.saveToDisk();
+      throw new Error("Durable database persistence is unconfigured in production");
     }
 
     return updated;
@@ -233,10 +268,27 @@ export class TenantStore {
 
     if (isSupabaseConfigured) {
       try {
-        await supabase.from("tenants").delete().eq("id", id);
+        const { error } = await supabase.from("tenants").delete().eq("id", id);
+        if (error) {
+          console.error("[TenantStore] Supabase delete failed:", error.message);
+          if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+            this.tenants.set(id, existing);
+            this.saveToDisk();
+            throw new Error(`Failed to delete tenant from durable database: ${error.message}`);
+          }
+        }
       } catch (err) {
         console.warn("[TenantStore] Supabase delete warning:", err);
+        if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+          this.tenants.set(id, existing);
+          this.saveToDisk();
+          throw err;
+        }
       }
+    } else if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+      this.tenants.set(id, existing);
+      this.saveToDisk();
+      throw new Error("Durable database persistence is unconfigured in production");
     }
 
     return true;
@@ -244,3 +296,19 @@ export class TenantStore {
 }
 
 export const tenantStore = new TenantStore();
+
+/**
+ * Validates whether a caller owns or has access to a given tenant ID.
+ * Admins have global access. Users have access to their own user ID and any tenant they own.
+ */
+export async function isTenantOwnedByUser(
+  tenantId: string | undefined,
+  userId: string,
+  role: string
+): Promise<boolean> {
+  if (!tenantId) return true;
+  if (role === "admin") return true;
+  if (tenantId === userId) return true;
+  const tenant = await tenantStore.get(tenantId);
+  return Boolean(tenant && tenant.ownerId === userId);
+}

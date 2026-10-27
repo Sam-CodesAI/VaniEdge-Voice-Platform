@@ -13,6 +13,7 @@
 
 import crypto from "crypto";
 import { NextRequest } from "next/server";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase-client";
 
 export interface SignatureValidationResult {
   valid: boolean;
@@ -20,7 +21,7 @@ export interface SignatureValidationResult {
   statusCode?: number;
 }
 
-// In-memory idempotency deduplication cache
+// In-memory idempotency deduplication cache (L1 fast path)
 const PROCESSED_EVENTS = new Map<string, number>();
 
 // Clean up expired idempotency keys every 10 minutes
@@ -39,7 +40,7 @@ if (typeof setInterval !== "undefined") {
 }
 
 /**
- * Checks whether an event has already been processed to prevent duplicate executions.
+ * Checks whether an event has already been processed using process-local memory.
  * @returns true if event was already processed (duplicate), false if new
  */
 export function checkEventDuplicate(eventId: string, ttlMs: number = 5 * 60 * 1000): boolean {
@@ -48,6 +49,56 @@ export function checkEventDuplicate(eventId: string, ttlMs: number = 5 * 60 * 10
   if (existing && now <= existing) {
     return true; // Duplicate
   }
+  PROCESSED_EVENTS.set(eventId, now + ttlMs);
+  return false;
+}
+
+/**
+ * Distributed multi-instance webhook idempotency verification.
+ * Checks L1 in-memory cache first, then coordinates via Supabase `idempotency_keys` table.
+ * Guarantees zero duplicate webhook executions across independent serverless instances.
+ */
+export async function checkEventDuplicateAsync(
+  eventId: string,
+  ttlMs: number = 5 * 60 * 1000
+): Promise<boolean> {
+  const now = Date.now();
+
+  // 1. Check L1 in-memory cache
+  const existing = PROCESSED_EVENTS.get(eventId);
+  if (existing && now <= existing) {
+    return true;
+  }
+
+  // 2. If Supabase is configured, use atomic database insertion
+  if (isSupabaseConfigured) {
+    try {
+      const expiresAt = new Date(now + ttlMs).toISOString();
+      const { error } = await supabase.from("idempotency_keys").insert([
+        {
+          key: eventId,
+          scope: "twilio_webhook",
+          expires_at: expiresAt,
+        },
+      ]);
+
+      if (error) {
+        // Unique constraint violation (23505) means another instance already recorded this event
+        if (error.code === "23505" || error.message.includes("duplicate key")) {
+          PROCESSED_EVENTS.set(eventId, now + ttlMs);
+          return true; // Duplicate!
+        }
+        console.warn("[DistributedIdempotency] Failed to insert key, falling back to L1 cache:", error.message);
+      } else {
+        PROCESSED_EVENTS.set(eventId, now + ttlMs);
+        return false; // Successfully acquired
+      }
+    } catch (dbErr) {
+      console.warn("[DistributedIdempotency] Supabase exception, falling back to L1 cache:", dbErr);
+    }
+  }
+
+  // Fallback to in-memory L1 cache
   PROCESSED_EVENTS.set(eventId, now + ttlMs);
   return false;
 }
@@ -73,14 +124,20 @@ export function getCanonicalWebhookUrl(req: NextRequest | Request): string {
     }
   }
 
-  // Inspect trusted proxy headers
-  const proto = req.headers.get("x-forwarded-proto");
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  // Inspect trusted proxy headers with multi-hop protection
+  const rawProto = req.headers.get("x-forwarded-proto");
+  const proto = rawProto ? rawProto.split(",")[0]?.trim() : null;
+
+  const rawHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const host = rawHost ? rawHost.split(",")[0]?.trim() : null;
 
   if (proto) {
     rawUrl.protocol = proto.endsWith(":") ? proto : `${proto}:`;
   }
   if (host) {
+    if (!host.includes(":")) {
+      rawUrl.port = "";
+    }
     rawUrl.host = host;
   }
 

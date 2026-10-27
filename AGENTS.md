@@ -44,6 +44,7 @@ VaniEdge operates on an intentional **dual-runtime architecture**. Code must nev
 
 ### A. Authentication & Session Management
 - **Zero In-Memory Production State:** Never store production accounts, API keys, or active sessions in transient JavaScript `Map` objects. Use durable Supabase tables (`vaniedge_users`, `vaniedge_sessions`) or the atomic disk fallback (`.data/`).
+- **Production Database Guard:** In production (`NODE_ENV === "production"`), missing Supabase credentials or failed durable database writes throw hard errors and roll back state rather than silently falling back to ephemeral storage (unless `ALLOW_LOCAL_DISK_FALLBACK=true` is explicitly configured for offline testing).
 - **No Hardcoded Credentials:** Never seed default accounts (`developer@vaniedge.ai`, `demo@vaniedge.ai`) or hardcoded passwords (`password123`) in production.
 - **Scrypt Password Hashing:** Use standard scrypt hashing (`N=16384, r=8, p=1`) with cryptographically secure random salts and NFKC unicode normalization. Password length boundaries must be 8–128 characters.
 - **User Enumeration Defense:** Always perform a constant-time dummy scrypt verification if an email address does not exist during sign-in.
@@ -60,14 +61,17 @@ VaniEdge operates on an intentional **dual-runtime architecture**. Code must nev
 - **Twilio HMAC-SHA1:** Every externally reachable Twilio webhook (`/api/voice/*` and worker `/voice/*`) must verify `X-Twilio-Signature` using `validateTwilioSignature()`.
 - **Fail-Closed Rule:** In production (`NODE_ENV === "production"`), missing `TWILIO_AUTH_TOKEN` or missing/invalid signatures MUST immediately reject with HTTP 401. Never skip verification when secrets are missing.
 - **Timing-Safe Equality:** Compare signature hashes using `crypto.timingSafeEqual` to avoid side-channel timing attacks.
-- **Replay Protection:** Deduplicate status callbacks using the event idempotency cache (`checkEventDuplicate`).
+- **Replay Protection:** Deduplicate status callbacks using distributed idempotency keys (`checkEventDuplicateAsync`) coordinated via the `idempotency_keys` table.
 
 ### D. Rate Limiting & Input Validation
 - Protect all sensitive endpoints with sliding-window rate limiters:
   - Auth (`/api/auth/signin`, `/api/auth/signup`): 5 requests / min per IP.
-  - Chat & RAG (`/api/chat`, `/api/query`): 60 requests / min per IP.
+  - Chat (`/api/chat`): 30 requests / min per IP.
+  - RAG (`/api/query` query & ingestion): 60 requests / min per IP.
   - Dispatch (`/api/dispatch`): 15 requests / min per IP.
   - Agency Tenants (`/api/agency/tenants`): 60 requests / min per IP.
+  - Speech Synthesis (`/api/tts`): 20 requests / min per IP.
+  - Telemetry Metrics (`/api/metrics`): 30 requests / min per IP.
 - Resolve client IPs safely via trusted proxy headers (`cf-connecting-ip`, `x-real-ip`, leftmost `x-forwarded-for`).
 - Validate all incoming payloads with strict Zod schemas with explicit string length bounds.
 
@@ -102,7 +106,7 @@ pnpm typecheck
 # 3. Cloudflare Worker TypeScript build verification
 pnpm build:ts
 
-# 4. Automated test suite (all 51 tests across 7 suites must pass)
+# 4. Automated test suite (all 60 tests across 8 suites must pass)
 pnpm test
 
 # 5. Production Next.js compilation
@@ -117,6 +121,7 @@ pnpm build
 - `test/rate-limit.test.ts`: Sliding-window burst mitigation, proxy header IP extraction.
 - `test/e2e-failure-benchmark.test.ts`: Measured latency deadlines (151ms failover callback, <5ms Tier 2 trip, <2ms Tier 3 triage, burst volume distribution).
 - `test/telephony-failover.test.ts`: Four-tier state machine transitions, TwiML generation.
+- `test/production-readiness.test.ts`: Startup environment assertions, rollback on database failure, cross-tenant dispatch/query access, TTS limits, distributed idempotency.
 
 ---
 

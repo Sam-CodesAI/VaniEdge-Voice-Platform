@@ -134,6 +134,9 @@ export async function persistSessionToDatabase(session: CallSession): Promise<{ 
   saveSessionsToDisk();
 
   if (!isSupabaseConfigured) {
+    if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+      return { success: false, error: "Durable database is unconfigured in production" };
+    }
     return { success: true };
   }
 

@@ -48,7 +48,11 @@ export function validateEnvironment(): EnvValidationReport {
       warnings.push("ELEVENLABS_API_KEY is not configured. Conversational AI agent will fall back to local responses.");
     }
     if (!hasSupabase) {
-      warnings.push("Supabase credentials not configured; using local resilient disk storage for auth and tenants.");
+      if (process.env.ALLOW_LOCAL_DISK_FALLBACK === "true") {
+        warnings.push("ALLOW_LOCAL_DISK_FALLBACK=true is active. Local disk storage will be used, which is ephemeral on multi-instance serverless deployments.");
+      } else {
+        errors.push("Supabase credentials (NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) are required in production for durable multi-instance persistence. Set ALLOW_LOCAL_DISK_FALLBACK=true only for single-instance offline testing.");
+      }
     }
   } else {
     if (!hasTwilioToken) {

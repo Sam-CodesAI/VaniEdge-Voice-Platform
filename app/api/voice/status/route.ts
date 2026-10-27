@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantById } from "@/lib/telephony/tenant-store";
-import { verifyTwilioWebhook, checkEventDuplicate } from "@/lib/telephony/security";
+import { verifyTwilioWebhook, checkEventDuplicateAsync } from "@/lib/telephony/security";
 import {
   getCallSession,
   executeTier4SmsRescue,
@@ -42,9 +42,9 @@ export async function POST(req: NextRequest) {
     const callStatus = parsed.success ? parsed.data.CallStatus : bodyParams.CallStatus || "completed";
     const durationSec = parseInt(bodyParams.CallDuration || bodyParams.Duration || "0", 10);
 
-    // 2. Replay & Duplicate Callback Protection
+    // 2. Distributed Replay & Duplicate Callback Protection
     const eventKey = `status:${callSid}:${callStatus}:${durationSec}`;
-    const isDuplicate = checkEventDuplicate(eventKey);
+    const isDuplicate = await checkEventDuplicateAsync(eventKey);
     if (isDuplicate) {
       // Acknowledge with 200 OK so Twilio ceases retries without duplicate processing
       return NextResponse.json({

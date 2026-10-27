@@ -103,6 +103,8 @@ While physical PSTN carrier disconnects (such as cellular coverage loss, dead zo
   - RAG routes (`/api/query` query & ingestion): 60 requests / minute per IP.
   - Dispatch ticket creation (`/api/dispatch`): 15 requests / minute per IP.
   - Agency tenant management (`/api/agency/tenants`): 60 requests / minute per IP.
+  - Speech synthesis route (`/api/tts`): 20 requests / minute per IP.
+  - Telemetry metrics route (`/api/metrics`): 30 requests / minute per IP.
 - Client IPs are resolved securely using trusted proxy headers (`cf-connecting-ip`, `x-real-ip`, leftmost `x-forwarded-for`).
 - All incoming payloads are parsed and constrained using strict Zod schemas with character and array length limits.
 
@@ -119,6 +121,7 @@ The complete production schema is defined in `supabase/migrations/20261027_vanie
 - `tenants`: Multi-tenant business profiles, operating hours, emergency keywords, and voice configurations.
 - `dispatch_tickets`: Customer appointments and service tickets with SHA checksums.
 - `call_sessions`: Telephony call lifecycles, latency telemetry, and triage logs.
+- `idempotency_keys`: Distributed webhook deduplication and replay protection keys.
 - `sutradb_knowledge`: Hybrid vector/lexical RAG document repository.
 
 #### Applying Migrations:
@@ -133,6 +136,7 @@ supabase db push
 #### Rollback Instructions:
 To tear down tables created in this migration:
 ```sql
+DROP TABLE IF EXISTS idempotency_keys CASCADE;
 DROP TABLE IF EXISTS call_sessions CASCADE;
 DROP TABLE IF EXISTS dispatch_tickets CASCADE;
 DROP TABLE IF EXISTS tenants CASCADE;
@@ -176,12 +180,13 @@ DROP TABLE IF EXISTS vaniedge_users CASCADE;
 | Method | Endpoint | Description | Auth / Security |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/chat` | Customer web assistant conversation | Rate Limited (30/min), Length Bounded |
+| `POST` | `/api/tts` | Real-time speech synthesis (ElevenLabs/Polly) | Rate Limited (20/min), Max 1000 Chars |
 | `POST` | `/api/query` | SutraDB RAG semantic document retrieval | `requireAuth()`, Rate Limited (60/min), Zod Schema |
 | `PUT` | `/api/query` | Ingest knowledge chunk into RAG | `requireAuth()`, Rate Limited (60/min), Zod Schema |
 | `POST` | `/api/dispatch` | Create dispatch ticket & queue SMS | `requireAuth()` (CSRF Protected), Rate Limited (15/min), SHA Checksum |
 | `GET` | `/api/dispatch` | Query tenant dispatch tickets | `requireAuth()`, Tenant Scoped IDOR Protection |
 | `GET` | `/api/health` | Service health status & provider readiness | Masked Credentials, No Secret Leaks |
-| `GET` | `/api/metrics` | Telephony stage latency percentiles | Sanitized CallSIDs |
+| `GET` | `/api/metrics` | Telephony stage latency percentiles | Rate Limited (30/min), Authenticated in Production |
 
 ---
 
@@ -223,7 +228,7 @@ pnpm run dev:worker
 The repository contains an automated test suite verifying security controls, webhook signatures, tenant isolation, rate limiting, and end-to-end failure benchmarks.
 
 ```bash
-# Run all automated tests (51 tests across 7 test suites):
+# Run all automated tests (60 tests across 8 test suites):
 pnpm test
 
 # Run TypeScript static typechecking:

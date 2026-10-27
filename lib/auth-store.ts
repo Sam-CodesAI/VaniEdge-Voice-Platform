@@ -180,7 +180,12 @@ export class DurableAuthDatabase {
   // ============================================================================
 
   private async persistUserToSupabase(user: UserRecord): Promise<void> {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+        throw new Error("Durable database persistence is unconfigured in production");
+      }
+      return;
+    }
 
     try {
       // 1. Try dedicated vaniedge_users table
@@ -195,6 +200,7 @@ export class DurableAuthDatabase {
           provider: user.provider,
           avatar_url: user.avatarUrl || null,
           tier: user.tier,
+          role: user.role,
           credentials: user.credentials,
           voice_minutes_total: user.voiceMinutesTotal,
           voice_minutes_used: user.voiceMinutesUsed,
@@ -206,7 +212,7 @@ export class DurableAuthDatabase {
 
       if (error) {
         // Fallback to site_settings KV row if table does not exist
-        await supabase.from("site_settings").upsert(
+        const { error: fallbackError } = await supabase.from("site_settings").upsert(
           {
             key: `auth_user_${user.id}`,
             value: user,
@@ -214,14 +220,28 @@ export class DurableAuthDatabase {
           },
           { onConflict: "key" }
         );
+        if (fallbackError) {
+          console.error("[AuthDatabase] Supabase user persist failed:", error.message, fallbackError.message);
+          if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+            throw new Error(`Failed to persist user to durable database: ${error.message}`);
+          }
+        }
       }
     } catch (err) {
       console.warn("[AuthDatabase] Supabase user persist warning:", err);
+      if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+        throw err;
+      }
     }
   }
 
   private async persistSessionToSupabase(session: SessionRecord): Promise<void> {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+        throw new Error("Durable database persistence is unconfigured in production");
+      }
+      return;
+    }
 
     try {
       // 1. Try dedicated vaniedge_sessions table
@@ -240,7 +260,7 @@ export class DurableAuthDatabase {
 
       if (error) {
         // Fallback to site_settings KV row
-        await supabase.from("site_settings").upsert(
+        const { error: fallbackError } = await supabase.from("site_settings").upsert(
           {
             key: `auth_session_${session.token}`,
             value: session,
@@ -248,9 +268,18 @@ export class DurableAuthDatabase {
           },
           { onConflict: "key" }
         );
+        if (fallbackError) {
+          console.error("[AuthDatabase] Supabase session persist failed:", error.message, fallbackError.message);
+          if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+            throw new Error(`Failed to persist session to durable database: ${error.message}`);
+          }
+        }
       }
     } catch (err) {
       console.warn("[AuthDatabase] Supabase session persist warning:", err);
+      if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_DISK_FALLBACK !== "true") {
+        throw err;
+      }
     }
   }
 
@@ -428,11 +457,27 @@ export class DurableAuthDatabase {
     this.usersByApiKey.set(credentials.apiKey, id);
     this.saveToDisk();
 
-    // Persist to cloud database
-    await this.persistUserToSupabase(user);
+    // Persist to durable database with transactional rollback on failure
+    try {
+      await this.persistUserToSupabase(user);
+    } catch (err) {
+      this.users.delete(id);
+      this.usersByEmail.delete(normalizedEmail);
+      this.usersByApiKey.delete(credentials.apiKey);
+      this.saveToDisk();
+      throw err;
+    }
 
-    const token = await this.createSession(id);
-    return { user, token };
+    try {
+      const token = await this.createSession(id);
+      return { user, token };
+    } catch (err) {
+      this.users.delete(id);
+      this.usersByEmail.delete(normalizedEmail);
+      this.usersByApiKey.delete(credentials.apiKey);
+      this.saveToDisk();
+      throw err;
+    }
   }
 
   public async authenticate(email: string, password: string): Promise<{ user: UserRecord; token: string }> {
@@ -492,7 +537,14 @@ export class DurableAuthDatabase {
 
     this.sessions.set(token, session);
     this.saveToDisk();
-    await this.persistSessionToSupabase(session);
+
+    try {
+      await this.persistSessionToSupabase(session);
+    } catch (err) {
+      this.sessions.delete(token);
+      this.saveToDisk();
+      throw err;
+    }
 
     return token;
   }

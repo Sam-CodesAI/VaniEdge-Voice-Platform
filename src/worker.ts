@@ -70,6 +70,41 @@ async function parseParams(request: Request): Promise<Record<string, string>> {
 }
 
 /**
+ * Resolves the canonical external URL for Twilio webhook verification on Cloudflare Workers,
+ * accounting for reverse proxies, TLS offloading, and explicit PUBLIC_URL configuration.
+ */
+function getWorkerCanonicalUrl(request: Request, env: Env): string {
+  const url = new URL(request.url);
+  if (env.PUBLIC_URL) {
+    try {
+      const base = new URL(env.PUBLIC_URL);
+      url.protocol = base.protocol;
+      url.host = base.host;
+      return url.toString();
+    } catch {
+      // Ignore parse failure, fall back to header inspection
+    }
+  }
+
+  const rawProto = request.headers.get('x-forwarded-proto');
+  const proto = rawProto ? rawProto.split(',')[0]?.trim() : null;
+  const rawHost = request.headers.get('x-forwarded-host') || request.headers.get('host');
+  const host = rawHost ? rawHost.split(',')[0]?.trim() : null;
+
+  if (proto) {
+    url.protocol = proto.endsWith(':') ? proto : `${proto}:`;
+  }
+  if (host) {
+    if (!host.includes(':')) {
+      url.port = '';
+    }
+    url.host = host;
+  }
+
+  return url.toString();
+}
+
+/**
  * Validates Twilio webhook signatures strictly on Edge Workers, failing closed in all environments
  * unless explicitly bypassed via ALLOW_INSECURE_DEV_WEBHOOKS=true in local development.
  */
@@ -108,10 +143,11 @@ async function verifyTwilioWorkerSignature(
     };
   }
 
-  // 3. Cryptographically verify HMAC-SHA1 signature
+  // 3. Cryptographically verify HMAC-SHA1 signature against canonical URL
+  const canonicalUrl = getWorkerCanonicalUrl(request, env);
   const isValid = await validateTwilioSignature(
     signatureHeader,
-    request.url,
+    canonicalUrl,
     params,
     env.TWILIO_AUTH_TOKEN
   );

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { z } from "zod";
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
-
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 
 const VOICE_MAP: Record<string, string> = {
@@ -19,25 +20,49 @@ const AWS_VOICE_MAP: Record<string, string> = {
   bella: "Salli",
 };
 
+const TtsSchema = z.object({
+  text: z.string().min(1, "Text cannot be empty").max(1000, "Text exceeds maximum 1000 characters limit"),
+  voiceId: z.string().max(100).optional(),
+  languageCode: z.string().max(10).optional(),
+  engine: z.enum(["elevenlabs", "polly"]).optional(),
+});
+
 export async function POST(req: NextRequest) {
   try {
-    const { text, voiceId = "sarah", languageCode, engine = "elevenlabs" } = (await req.json()) as {
-      text?: string;
-      voiceId?: string;
-      languageCode?: string;
-      engine?: "elevenlabs" | "polly";
-    };
-
-    if (!text || typeof text !== "string") {
-      return NextResponse.json({ error: "Text is required" }, { status: 400 });
+    // 1. Sliding-window rate limit: 20 requests per minute per IP
+    const clientIp = getClientIp(req);
+    const rateCheck = checkRateLimit(clientIp, "tts", 20, 60 * 1000);
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { error: "Too many TTS requests. Please slow down." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil(rateCheck.resetMs / 1000).toString(),
+            "X-RateLimit-Limit": rateCheck.limit.toString(),
+            "X-RateLimit-Remaining": rateCheck.remaining.toString(),
+          },
+        }
+      );
     }
+
+    // 2. Strict input validation
+    const rawBody = (await req.json()) as unknown;
+    const parseResult = TtsSchema.safeParse(rawBody);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parseResult.error.format() },
+        { status: 400 }
+      );
+    }
+
+    const { text, voiceId = "sarah", languageCode, engine = "elevenlabs" } = parseResult.data;
 
     if (engine === "polly" || !ELEVENLABS_API_KEY) {
       return await generatePollyTTS(text, voiceId);
     }
 
     const resolvedVoiceId = VOICE_MAP[voiceId.toLowerCase()] || voiceId;
-
     const elevenLabsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}?optimize_streaming_latency=3`;
 
     const requestBody: {
@@ -94,7 +119,7 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("VaniEdge TTS Route Error:", msg);
     return NextResponse.json(
-      { error: "TTS Generation failed", details: msg },
+      { error: "TTS Generation failed", details: "Upstream synthesis service failure" },
       { status: 500 }
     );
   }

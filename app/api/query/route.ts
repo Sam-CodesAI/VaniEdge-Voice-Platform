@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase-client";
 import { DEFAULT_KNOWLEDGE_PRESETS } from "@/lib/sutradb-engine";
 import { requireAuth } from "@/lib/auth-guard";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { isTenantOwnedByUser } from "@/lib/tenant-store";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -56,16 +57,17 @@ export async function POST(request: NextRequest) {
 
     const { query, category, filter, topK, minScore, tenantId } = parseResult.data;
 
-    // 4. Strict Tenant Isolation: non-admins cannot query other tenants' knowledge
-    const isSuperAdmin = auth!.user.role === "admin";
-    if (tenantId && !isSuperAdmin && tenantId !== auth!.user.id) {
+    // 4. Strict Tenant Isolation: verify caller has access to the requested tenant
+    const userRole = auth!.user.role || "user";
+    const hasAccess = await isTenantOwnedByUser(tenantId, auth!.user.id, userRole);
+    if (!hasAccess) {
       return NextResponse.json(
         { error: "Forbidden: Cannot query documents belonging to another tenant" },
         { status: 403 }
       );
     }
 
-    const effectiveTenantId = isSuperAdmin ? (tenantId || auth!.user.id) : auth!.user.id;
+    const effectiveTenantId = tenantId || auth!.user.id;
 
     const engine = new SutraHybridEngine();
 
@@ -145,16 +147,17 @@ export async function PUT(request: NextRequest) {
 
     const { title, content, category, metadata, tenantId: bodyTenantId } = parseResult.data;
 
-    // Strict Tenant Isolation: scope tenant_id strictly to authenticated user unless super-admin
-    const isSuperAdmin = auth!.user.role === "admin";
-    if (bodyTenantId && !isSuperAdmin && bodyTenantId !== auth!.user.id) {
+    // Strict Tenant Isolation: verify caller has access to the target tenant
+    const userRole = auth!.user.role || "user";
+    const hasAccess = await isTenantOwnedByUser(bodyTenantId, auth!.user.id, userRole);
+    if (!hasAccess) {
       return NextResponse.json(
         { error: "Forbidden: Cannot ingest documents into another tenant's knowledge store" },
         { status: 403 }
       );
     }
 
-    const effectiveTenantId = isSuperAdmin ? bodyTenantId || auth!.user.id : auth!.user.id;
+    const effectiveTenantId = bodyTenantId || auth!.user.id;
 
     const doc = {
       tenant_id: effectiveTenantId,

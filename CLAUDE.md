@@ -18,7 +18,7 @@ All commands use `pnpm` (Node.js 22 LTS).
 | `pnpm dev:worker` | Start local Cloudflare Worker development runtime via Wrangler |
 | `pnpm typecheck` | Static TypeScript analysis (`tsc --noEmit`) |
 | `pnpm build:ts` | Compile and verify Cloudflare Worker TypeScript (`wrangler deploy --dry-run`) |
-| `pnpm test` | Run Vitest automated test suite (51 tests across 7 suites) |
+| `pnpm test` | Run automated test suite (60 tests across 8 suites) |
 | `pnpm build` | Compile production Next.js 16 application with Turbopack |
 
 ---
@@ -58,11 +58,12 @@ VaniEdge-Voice-Platform/
 │   ├── engine/                       # Voice stream bridging & watchdog timers
 │   └── dispatch/                     # Ticket dispatcher & emergency routing
 ├── supabase/migrations/              # Durable database schema definitions
-│   └── 20261027_vaniedge_auth.sql    # Users, sessions, tenants, tickets, call sessions
-└── test/                             # Automated test suite (Vitest)
+│   └── 20261027_vaniedge_auth.sql    # Users, sessions, tenants, tickets, call sessions, idempotency
+└── test/                             # Automated test suite (60 tests across 8 suites)
     ├── auth-security.test.ts         # Scrypt hashing, constant-time verification, sessions
     ├── durable-persistence.test.ts   # Database resilience & fallback persistence
     ├── e2e-failure-benchmark.test.ts # Measured timeout deadlines & burst distribution
+    ├── production-readiness.test.ts  # Startup assertions, outage rollback, cross-tenant, TTS/Metrics
     ├── rate-limit.test.ts            # Sliding-window rate limiting & IP extraction
     ├── telephony-failover.test.ts    # 4-tier state machine transitions & TwiML
     ├── tenant-isolation.test.ts      # Multi-tenant IDOR protection & credential scrubbing

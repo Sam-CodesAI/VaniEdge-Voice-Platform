@@ -25,6 +25,24 @@ const configStatus = validateSupabaseConfig();
 export const isSupabaseConfigured = configStatus.isConfigured;
 
 /**
+ * Validates that production cannot silently fall back to ephemeral or unsafe local storage.
+ * In production, either valid Supabase credentials must be present, or ALLOW_LOCAL_DISK_FALLBACK=true
+ * must be explicitly set for single-instance offline testing.
+ */
+export function assertSupabaseConfiguredForProduction(): void {
+  const isProd = process.env.NODE_ENV === "production";
+  const allowDiskFallback = process.env.ALLOW_LOCAL_DISK_FALLBACK === "true";
+  if (isProd && !allowDiskFallback) {
+    const check = validateSupabaseConfig();
+    if (!check.isConfigured) {
+      throw new Error(
+        `[SupabaseClient] Production persistence error: ${check.error}. Multi-instance production requires a durable Supabase datastore.`
+      );
+    }
+  }
+}
+
+/**
  * Creates an unconfigured dummy builder that fails safely with an explicit error
  * rather than issuing network requests to invalid placeholder URLs.
  */

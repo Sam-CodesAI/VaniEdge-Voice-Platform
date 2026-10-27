@@ -71,6 +71,7 @@ This migration provisions the following durable tables with Row Level Security (
 - `tenants`: Multi-tenant business profiles, operating hours, emergency keywords, and voice routing.
 - `dispatch_tickets`: Customer appointments and service tickets with SHA-256 checksums.
 - `call_sessions`: Telephony call lifecycles, latency telemetry, and triage logs.
+- `idempotency_keys`: Distributed webhook deduplication and replay protection.
 - `sutradb_knowledge`: Hybrid vector/lexical RAG document repository.
 
 ---
@@ -201,7 +202,7 @@ Execute this automated checklist before delivering credentials to the client:
 | **1** | **Environment Auditor** | `pnpm check:env` | All required variables present & valid | [x] |
 | **2** | **Static Typecheck** | `pnpm typecheck` | 0 TypeScript compiler errors | [x] |
 | **3** | **Worker Build** | `pnpm build:ts` | Wrangler compilation clean | [x] |
-| **4** | **Automated Tests** | `pnpm test` | All 51 tests pass across 7 suites | [x] |
+| **4** | **Automated Tests** | `pnpm test` | All 60 tests pass across 8 suites | [x] |
 | **5** | **Next.js Production Build** | `pnpm build` | Clean production build output | [x] |
 | **6** | **Webhook Auth** | `curl -X POST /api/voice/incoming` | Returns 401 Unauthorized without HMAC signature | [x] |
 | **7** | **IDOR Isolation** | `curl -X GET /api/agency/tenants/:id` | Returns 404 for unowned tenants | [x] |
