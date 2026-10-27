@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { authDb, DurableAuthDatabase } from "../lib/auth-store";
+import { POST as handleSignIn } from "../app/api/auth/signin/route";
+import { POST as handleSignUp } from "../app/api/auth/signup/route";
+import { POST as handleSignOut } from "../app/api/auth/signout/route";
 
 test("VaniEdge Auth Security & Persistence Test Suite", async (t) => {
   await t.test("Requirement 1: Demo credentials must NOT be seeded in production", async () => {
@@ -165,5 +168,83 @@ test("VaniEdge Auth Security & Persistence Test Suite", async (t) => {
     const sessionOnNew = await newInstance.getSessionUser(token);
     assert.ok(sessionOnNew);
     assert.equal(sessionOnNew?.id, user.id);
+  });
+
+  await t.test("Requirement 7: Signin and Signup routes encapsulate tokens in HttpOnly cookies and never expose tokens in JSON", async () => {
+    const email = `route_test_${Date.now()}@example.com`;
+    const password = "HardenedPassword#2026!";
+
+    // 1. Test POST /api/auth/signup
+    const signupReq = new Request("http://localhost:3000/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Route Test User",
+        email,
+        password,
+        company: "Security Testing Ltd",
+      }),
+    });
+
+    const signupRes = await handleSignUp(signupReq);
+    assert.equal(signupRes.status, 201);
+
+    const signupJson = (await signupRes.json()) as Record<string, unknown>;
+    assert.equal(signupJson.success, true);
+    assert.ok(signupJson.user);
+    // CRITICAL: Token must NEVER be exposed in JSON response body
+    assert.equal(signupJson.token, undefined, "Session token must NOT be returned in JSON response body");
+
+    // Cookie must be set with httpOnly: true
+    const setCookieHeader = signupRes.headers.get("set-cookie") || "";
+    assert.ok(setCookieHeader.includes("vaniedge_session="), "Must set vaniedge_session cookie");
+    assert.ok(setCookieHeader.toLowerCase().includes("httponly"), "Cookie must be HttpOnly");
+    assert.ok(setCookieHeader.toLowerCase().includes("samesite=lax"), "Cookie must enforce SameSite=Lax");
+
+    // Extract session token from cookie
+    const tokenMatch = setCookieHeader.match(/vaniedge_session=([^;]+)/);
+    assert.ok(tokenMatch && tokenMatch[1], "Must extract cookie token");
+    const sessionToken = tokenMatch[1];
+
+    // 2. Test POST /api/auth/signin
+    const signinReq = new Request("http://localhost:3000/api/auth/signin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
+    });
+
+    const signinRes = await handleSignIn(signinReq);
+    assert.equal(signinRes.status, 200);
+
+    const signinJson = (await signinRes.json()) as Record<string, unknown>;
+    assert.equal(signinJson.success, true);
+    assert.ok(signinJson.user);
+    // CRITICAL: Token must NEVER be exposed in JSON response body
+    assert.equal(signinJson.token, undefined, "Session token must NOT be returned in JSON response body");
+
+    const signinCookieHeader = signinRes.headers.get("set-cookie") || "";
+    assert.ok(signinCookieHeader.includes("vaniedge_session="));
+    assert.ok(signinCookieHeader.toLowerCase().includes("httponly"));
+
+    // 3. Test POST /api/auth/signout
+    const signoutReq = new Request("http://localhost:3000/api/auth/signout", {
+      method: "POST",
+      headers: {
+        cookie: `vaniedge_session=${sessionToken}`,
+      },
+    });
+
+    const signoutRes = await handleSignOut(signoutReq);
+    assert.equal(signoutRes.status, 200);
+
+    const signoutCookieHeader = signoutRes.headers.get("set-cookie") || "";
+    assert.ok(signoutCookieHeader.includes("Max-Age=0") || signoutCookieHeader.includes("max-age=0") || signoutCookieHeader.includes("Expires="));
+
+    // Server-side session must now be revoked
+    const postSignoutUser = await authDb.getSessionUser(sessionToken);
+    assert.equal(postSignoutUser, null, "Session must be revoked on the server after signout");
   });
 });

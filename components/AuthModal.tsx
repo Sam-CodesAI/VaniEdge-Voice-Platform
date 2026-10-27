@@ -17,7 +17,6 @@ import { UserRecord } from "@/lib/auth-store";
 interface AuthApiResponse {
   success?: boolean;
   user?: UserRecord;
-  token?: string;
   error?: string;
   message?: string;
 }
@@ -26,7 +25,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: "signin" | "signup";
-  onAuthSuccess: (user: UserRecord, token?: string) => void;
+  onAuthSuccess: (user: UserRecord) => void;
 }
 
 export default function AuthModal({
@@ -110,10 +109,7 @@ export default function AuthModal({
 
       if (res.ok && data.user) {
         localStorage.setItem("vaniedge_auth_user", JSON.stringify(data.user));
-        if (data.token) {
-          localStorage.setItem("vaniedge_session_token", data.token);
-        }
-        onAuthSuccess(data.user, data.token);
+        onAuthSuccess(data.user);
         onClose();
       } else {
         setError(data.error || "Authentication failed. Please check credentials.");

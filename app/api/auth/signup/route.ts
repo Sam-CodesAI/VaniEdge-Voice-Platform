@@ -67,7 +67,6 @@ export async function POST(req: Request) {
         success: true,
         message: "Account created successfully.",
         user: safeUser,
-        token,
       },
       { status: 201 }
     );

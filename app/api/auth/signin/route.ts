@@ -48,7 +48,6 @@ export async function POST(req: Request) {
         success: true,
         message: "Authenticated successfully.",
         user: safeUser,
-        token,
       },
       { status: 200 }
     );
