@@ -1,4 +1,6 @@
 import { supabase } from "@/lib/supabase-client";
+import { SutraClient } from "./sutradb-client";
+import { LruCache } from "@/src/engine/sutradb";
 /**
  * SutraDB Edge: High-Performance Hybrid Vector + BM25 Lexical Engine
  * Zero external SaaS dependencies, sub-5ms query latency for edge autonomous agents.
@@ -94,6 +96,8 @@ export class SutraEdgeIndex {
   // BM25 Hyperparameters
   private readonly k1: number = 1.5;
   private readonly b: number = 0.75;
+  private readonly lruCache: LruCache<string, SearchResult[]> = new LruCache<string, SearchResult[]>(500);
+  private readonly client: SutraClient = new SutraClient();
 
   constructor(initialDocs: DocumentEntry[] = []) {
     for (const doc of initialDocs) {
@@ -125,6 +129,7 @@ export class SutraEdgeIndex {
       totalLength += len;
     }
     this.avgDocLength = this.totalDocs > 0 ? totalLength / this.totalDocs : 0;
+    this.lruCache.clear();
   }
 
   public clear(): void {
@@ -133,9 +138,16 @@ export class SutraEdgeIndex {
     this.docFreqs.clear();
     this.avgDocLength = 0;
     this.totalDocs = 0;
+    this.lruCache.clear();
   }
 
   public search(query: string, topK: number = 3): SearchResult[] {
+    const cacheKey = `${query.toLowerCase().trim()}::${topK}`;
+    const cached = this.lruCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const queryTokens = tokenize(query);
     const queryVector = generateDenseVector(query);
     if (this.totalDocs === 0 || queryTokens.length === 0) return [];
@@ -196,7 +208,43 @@ export class SutraEdgeIndex {
     });
 
     scored.sort((a, b) => b.fusedScore - a.fusedScore);
-    return scored.slice(0, topK);
+    const finalResults = scored.slice(0, topK);
+    this.lruCache.set(cacheKey, finalResults);
+    return finalResults;
+  }
+
+  public async searchAsync(query: string, topK: number = 3): Promise<SearchResult[]> {
+    const cacheKey = `${query.toLowerCase().trim()}::${topK}`;
+    const cached = this.lruCache.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const remote = await this.client.query("vaniedge_knowledge", {
+        text: query,
+        top_k: topK,
+        hybrid: true,
+      });
+      if (remote && Array.isArray(remote.results) && remote.results.length > 0) {
+        const mapped: SearchResult[] = remote.results.map((r) => ({
+          document: {
+            id: r.id,
+            title: (r.metadata?.title as string) || r.id,
+            content: r.text || "",
+            category: (r.metadata?.category as string) || "general",
+            metadata: r.metadata as Record<string, string | number | boolean>,
+          },
+          bm25Score: r.bm25_score ?? 1.0,
+          vectorScore: r.dense_score ?? 1.0,
+          fusedScore: r.score,
+          matchedTerms: [],
+        }));
+        this.lruCache.set(cacheKey, mapped);
+        return mapped;
+      }
+    } catch {
+      // Fallback to local index
+    }
+    return this.search(query, topK);
   }
 
   public getDocumentCount(): number {

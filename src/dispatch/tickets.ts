@@ -153,21 +153,25 @@ export class TicketDispatcher {
     this.isLoaded = true;
   }
 
-  private saveToDisk(): void {
+  private async saveToDiskAsync(): Promise<void> {
     if (!this.diskFilePath) return;
     try {
-      const dir = path.dirname(this.diskFilePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      if (typeof process !== "undefined" && process.versions?.node && fs?.promises?.writeFile) {
+        const dir = path.dirname(this.diskFilePath);
+        await fs.promises.mkdir(dir, { recursive: true }).catch(() => {});
+        await fs.promises.writeFile(
+          this.diskFilePath,
+          JSON.stringify(Array.from(this.tickets.values()), null, 2),
+          "utf-8"
+        );
       }
-      fs.writeFileSync(
-        this.diskFilePath,
-        JSON.stringify(Array.from(this.tickets.values()), null, 2),
-        "utf-8"
-      );
     } catch {
-      // Ignore
+      // Ignore in read-only / edge environments
     }
+  }
+
+  private saveToDisk(): void {
+    this.saveToDiskAsync().catch(() => {});
   }
 
   public async createTicket(req: TicketRequest): Promise<TicketRecord> {

@@ -36,18 +36,25 @@ function loadSessionsFromDisk(): void {
   sessionsLoaded = true;
 }
 
-function saveSessionsToDisk(): void {
+async function saveSessionsToDiskAsync(): Promise<void> {
   try {
-    const dir = path.dirname(DISK_SESSIONS_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(
-      DISK_SESSIONS_PATH,
-      JSON.stringify(Array.from(ACTIVE_SESSIONS.values()), null, 2),
-      "utf-8"
-    );
+    if (typeof process !== "undefined" && process.versions?.node && fs?.promises?.writeFile) {
+      const dir = path.dirname(DISK_SESSIONS_PATH);
+      await fs.promises.mkdir(dir, { recursive: true }).catch(() => {});
+      await fs.promises.writeFile(
+        DISK_SESSIONS_PATH,
+        JSON.stringify(Array.from(ACTIVE_SESSIONS.values()), null, 2),
+        "utf-8"
+      );
+    }
   } catch {
-    // Ignore
+    // Resilient non-blocking fallback for edge and serverless isolates
   }
+}
+
+function saveSessionsToDisk(): void {
+  // Non-blocking async fire-and-forget; eliminates synchronous fs.writeFileSync
+  saveSessionsToDiskAsync().catch(() => {});
 }
 
 /**

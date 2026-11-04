@@ -14,6 +14,7 @@ import { MetricsCollector } from './telemetry/metrics';
 import { renderDashboardHtml } from './dashboard/html';
 import { SutraHybridEngine } from './engine/sutradb.js';
 import { TicketDispatcher, TicketRequest } from './dispatch/tickets.js';
+import { initSupabaseFromEnv } from '../lib/supabase-client.js';
 
 const sutraEngine = new SutraHybridEngine([
   {
@@ -188,6 +189,9 @@ function verifyWorkerApiAuth(request: Request, env: Env): Response | null {
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    // Dynamically inject Cloudflare Worker runtime env bindings into Supabase client
+    initSupabaseFromEnv(env as unknown as Record<string, string | undefined>);
+
     const url = new URL(request.url);
     const pathname = url.pathname;
     const method = request.method;
@@ -443,7 +447,7 @@ export default {
         const topK = Math.min(Math.max(1, body.topK ?? 3), 20);
         const minScore = Math.min(Math.max(0, body.minScore ?? 0), 1);
 
-        const results = sutraEngine.query(body.query, {
+        const results = await sutraEngine.queryAsync(body.query, {
           category: body.category,
           filter: body.filter,
           topK,

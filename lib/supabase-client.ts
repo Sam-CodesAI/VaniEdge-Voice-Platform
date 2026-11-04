@@ -1,10 +1,27 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
-const rawAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
-const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+/**
+ * Validates Supabase configuration from an explicit environment dictionary
+ * or falls back to global process.env.
+ */
+export function validateSupabaseConfig(env?: Record<string, string | undefined>): {
+  isConfigured: boolean;
+  error?: string;
+} {
+  const getEnv = (key: string): string => {
+    if (env && typeof env[key] === "string" && env[key]!.trim()) {
+      return env[key]!.trim();
+    }
+    if (typeof process !== "undefined" && process.env?.[key]) {
+      return process.env[key]!.trim();
+    }
+    return "";
+  };
 
-export function validateSupabaseConfig(): { isConfigured: boolean; error?: string } {
+  const rawUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL") || getEnv("SUPABASE_URL");
+  const rawAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") || getEnv("SUPABASE_ANON_KEY");
+  const rawServiceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+
   if (!rawUrl) {
     return { isConfigured: false, error: "Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_URL" };
   }
@@ -19,27 +36,6 @@ export function validateSupabaseConfig(): { isConfigured: boolean; error?: strin
     return { isConfigured: false, error: "Supabase credentials are set to default placeholders" };
   }
   return { isConfigured: true };
-}
-
-const configStatus = validateSupabaseConfig();
-export const isSupabaseConfigured = configStatus.isConfigured;
-
-/**
- * Validates that production cannot silently fall back to ephemeral or unsafe local storage.
- * In production, either valid Supabase credentials must be present, or ALLOW_LOCAL_DISK_FALLBACK=true
- * must be explicitly set for single-instance offline testing.
- */
-export function assertSupabaseConfiguredForProduction(): void {
-  const isProd = process.env.NODE_ENV === "production";
-  const allowDiskFallback = process.env.ALLOW_LOCAL_DISK_FALLBACK === "true";
-  if (isProd && !allowDiskFallback) {
-    const check = validateSupabaseConfig();
-    if (!check.isConfigured) {
-      throw new Error(
-        `[SupabaseClient] Production persistence error: ${check.error}. Multi-instance production requires a durable Supabase datastore.`
-      );
-    }
-  }
 }
 
 /**
@@ -79,30 +75,114 @@ function createUnconfiguredHandler(): any {
   };
 }
 
-const realSupabaseUrl = isSupabaseConfigured ? rawUrl : "https://placeholder.supabase.co";
-const serverKey = rawServiceKey || rawAnonKey || "placeholder-anon-key";
+// Initial evaluation from process.env if available
+const initialCheck = validateSupabaseConfig();
+export let isSupabaseConfigured = initialCheck.isConfigured;
 
-const rawServerClient: SupabaseClient = createClient(realSupabaseUrl, serverKey, {
-  auth: { persistSession: false },
-});
+function buildClientsFromEnv(env?: Record<string, string | undefined>) {
+  const getEnv = (key: string): string => {
+    if (env && typeof env[key] === "string" && env[key]!.trim()) {
+      return env[key]!.trim();
+    }
+    if (typeof process !== "undefined" && process.env?.[key]) {
+      return process.env[key]!.trim();
+    }
+    return "";
+  };
 
-const rawPublicClient: SupabaseClient = createClient(
-  realSupabaseUrl,
-  rawAnonKey || "placeholder-anon-key",
-  { auth: { persistSession: false } }
-);
+  const check = validateSupabaseConfig(env);
+  if (!check.isConfigured) {
+    return {
+      serverClient: createUnconfiguredHandler() as SupabaseClient,
+      publicClient: createUnconfiguredHandler() as SupabaseClient,
+      isConfigured: false,
+    };
+  }
+
+  const rawUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL") || getEnv("SUPABASE_URL");
+  const rawAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") || getEnv("SUPABASE_ANON_KEY");
+  const rawServiceKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const serverKey = rawServiceKey || rawAnonKey || "placeholder-anon-key";
+
+  const serverClient: SupabaseClient = createClient(rawUrl, serverKey, {
+    auth: { persistSession: false },
+  });
+  const publicClient: SupabaseClient = createClient(
+    rawUrl,
+    rawAnonKey || "placeholder-anon-key",
+    { auth: { persistSession: false } }
+  );
+
+  return { serverClient, publicClient, isConfigured: true };
+}
+
+let activeClients = buildClientsFromEnv();
+let activeServerClient = activeClients.serverClient;
+let activePublicClient = activeClients.publicClient;
+
+/**
+ * Dynamically initializes Supabase from Cloudflare Worker runtime env bindings.
+ * Guarantees isSupabaseConfigured evaluates to true inside edge isolates.
+ */
+export function initSupabaseFromEnv(env: Record<string, string | undefined>): {
+  supabase: SupabaseClient;
+  supabasePublic: SupabaseClient;
+  isConfigured: boolean;
+} {
+  activeClients = buildClientsFromEnv(env);
+  activeServerClient = activeClients.serverClient;
+  activePublicClient = activeClients.publicClient;
+  isSupabaseConfigured = activeClients.isConfigured;
+
+  return {
+    supabase: activeServerClient,
+    supabasePublic: activePublicClient,
+    isConfigured: isSupabaseConfigured,
+  };
+}
+
+/**
+ * Returns a configured Supabase client, optionally taking per-request Worker env bindings.
+ */
+export function getSupabaseClient(env?: Record<string, string | undefined>): SupabaseClient {
+  if (env) {
+    const clients = buildClientsFromEnv(env);
+    return clients.serverClient;
+  }
+  return activeServerClient;
+}
+
+/**
+ * Validates that production cannot silently fall back to ephemeral or unsafe local storage.
+ */
+export function assertSupabaseConfiguredForProduction(env?: Record<string, string | undefined>): void {
+  const isProd = (typeof process !== "undefined" && process.env.NODE_ENV === "production");
+  const allowDiskFallback = (typeof process !== "undefined" && process.env.ALLOW_LOCAL_DISK_FALLBACK === "true");
+  if (isProd && !allowDiskFallback) {
+    const check = validateSupabaseConfig(env);
+    if (!check.isConfigured) {
+      throw new Error(
+        `[SupabaseClient] Production persistence error: ${check.error}. Multi-instance production requires a durable Supabase datastore.`
+      );
+    }
+  }
+}
 
 /**
  * Server-side Supabase client with admin/service-role capabilities when SUPABASE_SERVICE_ROLE_KEY is provided.
- * Fails safely with explicit PostgrestError when unconfigured.
+ * Dynamically resolves through active runtime client (including Cloudflare Worker env).
  */
-export const supabase: SupabaseClient = isSupabaseConfigured
-  ? rawServerClient
-  : (createUnconfiguredHandler() as SupabaseClient);
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    return (activeServerClient as any)[prop];
+  },
+});
 
 /**
  * Public/Anonymous client for client-side or low-privilege queries adhering strictly to RLS policies.
  */
-export const supabasePublic: SupabaseClient = isSupabaseConfigured
-  ? rawPublicClient
-  : (createUnconfiguredHandler() as SupabaseClient);
+export const supabasePublic: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    return (activePublicClient as any)[prop];
+  },
+});
