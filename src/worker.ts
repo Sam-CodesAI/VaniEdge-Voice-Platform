@@ -12,9 +12,9 @@ import { generateStreamTwiML, generateFallbackTwiML } from './twilio/twiml';
 import { StreamBridge } from './stream/bridge';
 import { MetricsCollector } from './telemetry/metrics';
 import { renderDashboardHtml } from './dashboard/html';
-import { SutraHybridEngine } from './engine/sutradb.js';
-import { TicketDispatcher, TicketRequest } from './dispatch/tickets.js';
-import { initSupabaseFromEnv } from '../lib/supabase-client.js';
+import { SutraHybridEngine } from './engine/sutradb';
+import { TicketDispatcher, TicketRequest } from './dispatch/tickets';
+import { initSupabaseFromEnv } from '../lib/supabase-client';
 
 const sutraEngine = new SutraHybridEngine([
   {

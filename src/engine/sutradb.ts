@@ -4,7 +4,7 @@
  * zero-dependency SutraClient ASGI HTTP/2 backend synchronization.
  */
 
-import { SutraClient } from "../client/sutradb.js";
+import { SutraClient } from "../client/sutradb";
 
 export interface KnowledgeDocument {
   id: string;

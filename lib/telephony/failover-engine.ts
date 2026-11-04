@@ -15,13 +15,16 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase-client";
 
 // In-memory active session cache (survives warm serverless invocations)
 const ACTIVE_SESSIONS = new Map<string, CallSession>();
-const DISK_SESSIONS_PATH = path.join(process.cwd(), ".data", "call_sessions.json");
+const DISK_SESSIONS_PATH =
+  typeof process !== "undefined" && typeof process.cwd === "function"
+    ? path.join(process.cwd(), ".data", "call_sessions.json")
+    : null;
 let sessionsLoaded = false;
 
 function loadSessionsFromDisk(): void {
-  if (sessionsLoaded) return;
+  if (sessionsLoaded || !DISK_SESSIONS_PATH) return;
   try {
-    if (fs.existsSync(DISK_SESSIONS_PATH)) {
+    if (typeof fs.existsSync === "function" && fs.existsSync(DISK_SESSIONS_PATH)) {
       const raw = fs.readFileSync(DISK_SESSIONS_PATH, "utf-8");
       const list = JSON.parse(raw) as CallSession[];
       if (Array.isArray(list)) {
@@ -37,6 +40,7 @@ function loadSessionsFromDisk(): void {
 }
 
 async function saveSessionsToDiskAsync(): Promise<void> {
+  if (!DISK_SESSIONS_PATH) return;
   try {
     if (typeof process !== "undefined" && process.versions?.node && fs?.promises?.writeFile) {
       const dir = path.dirname(DISK_SESSIONS_PATH);

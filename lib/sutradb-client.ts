@@ -1,1 +1,1 @@
-export * from "../src/client/sutradb.js";
+export * from "../src/client/sutradb";
