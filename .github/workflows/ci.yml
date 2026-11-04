@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_ENV: test
+      ALLOW_LOCAL_DISK_FALLBACK: "true"
       TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
       TWILIO_AUTH_TOKEN: ci_twilio_auth_token_32chars_long!
       TWILIO_PHONE_NUMBER: +18149613703

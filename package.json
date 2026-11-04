@@ -1,6 +1,6 @@
 {
   "name": "vaniedge-voice-platform",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "VaniEdge Voice Platform 🎙️⚡: Enterprise Edge Telephony, Carrier Media Streaming, Sub-Second Failover Watchdog, and Multi-Lingual Voice AI with SutraDB RAG",
   "main": "dist/index.js",
   "type": "module",
@@ -11,7 +11,7 @@
     "build:ts": "tsc -p tsconfig.build.json",
     "deploy:worker": "wrangler deploy",
     "start": "next start",
-    "test": "tsx --test test/**/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 test/**/*.test.ts",
     "typecheck": "tsc --noEmit",
     "check:env": "tsx scripts/check-env.ts"
   },
