@@ -17,6 +17,7 @@ import {
 } from "@/lib/telephony/failover-engine";
 import { TwiMLBuilder } from "@/lib/telephony/twiml-builder";
 import { sendGmailMessage } from "@/lib/email/gmail";
+import { sendTelegramAdminAlert } from "@/lib/telegram-alert";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
 import { verifyTwilioWebhook } from "@/lib/telephony/security";
 
@@ -88,6 +89,14 @@ export async function POST(req: NextRequest) {
         </div>
       `,
     }).catch((err: unknown) => console.warn("[Recording] Email alert failed:", err));
+
+    // Dispatch real-time Telegram alert to Samarth (@Samarth1306)
+    sendTelegramAdminAlert({
+      type: "EMERGENCY_DISPATCH",
+      businessName: tenant.name,
+      contact: callerPhone,
+      details: `Urgent voicemail recorded (${recordingDuration}s). Listen: ${recordingUrl} ${transcriptionText ? `| "${transcriptionText}"` : ""}`,
+    }).catch((err: unknown) => console.warn("[Recording] Telegram alert failed:", err));
   }
 
   const builder = new TwiMLBuilder(tenant.voiceConfig.pollyVoice);

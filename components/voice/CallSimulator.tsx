@@ -123,7 +123,7 @@ export function CallSimulator({ tenant }: CallSimulatorProps) {
     setCallStatus("dialing");
     setCallActive(true);
     setSmsNotification(null);
-    const newSid = `CA_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newSid = `SIM_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     setCallSid(newSid);
 
     addEvent("inbound", `Dialing ${tenant.name} (${tenant.phone}) from +1-555-234-5678...`);
@@ -154,11 +154,15 @@ export function CallSimulator({ tenant }: CallSimulatorProps) {
     try {
       const res = await fetch("/api/voice/status", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-vaniedge-simulation": "true",
+        },
         body: JSON.stringify({
           CallSid: callSid,
           CallStatus: "completed",
           CallDuration: String(duration),
+          isSimulated: true,
         }),
       });
 
@@ -184,10 +188,14 @@ export function CallSimulator({ tenant }: CallSimulatorProps) {
     try {
       const res = await fetch(`/api/voice/process?callSid=${encodeURIComponent(callSid)}&tenantId=${encodeURIComponent(tenant.id)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-vaniedge-simulation": "true",
+        },
         body: JSON.stringify({
           CallSid: callSid,
           SpeechResult: speechText,
+          isSimulated: true,
         }),
       });
 

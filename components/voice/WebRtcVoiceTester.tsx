@@ -286,10 +286,14 @@ export function WebRtcVoiceTester({ tenant }: WebRtcVoiceTesterProps) {
           `/api/voice/process?callSid=${encodeURIComponent(sessionIdRef.current)}&tenantId=${encodeURIComponent(tenant.id)}`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-vaniedge-simulation": "true",
+            },
             body: JSON.stringify({
               CallSid: sessionIdRef.current,
               SpeechResult: trimmed,
+              isSimulated: true,
             }),
           }
         );

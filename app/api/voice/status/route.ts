@@ -20,6 +20,7 @@ import {
 } from "@/lib/telephony/failover-engine";
 import { TwilioStatusCallbackSchema } from "@/lib/telephony/types";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -27,14 +28,32 @@ export async function POST(req: NextRequest) {
   try {
     const bodyParams = await parseTelephonyRequestBody(req);
 
-    // 1. Enforce Twilio signature verification
-    const sigCheck = verifyTwilioWebhook(req, bodyParams);
-    if (!sigCheck.valid) {
-      console.warn(`[Voice Status] Rejected invalid signature: ${sigCheck.reason}`);
-      return NextResponse.json(
-        { error: "Unauthorized", reason: sigCheck.reason },
-        { status: sigCheck.statusCode || 401 }
-      );
+    const callSidParam = bodyParams.CallSid || "";
+    const isSimulated = Boolean(
+      bodyParams.isSimulated === "true" ||
+      (bodyParams.isSimulated as unknown) === true ||
+      req.headers.get("x-vaniedge-simulation") === "true" ||
+      callSidParam.startsWith("WEBRTC_") ||
+      callSidParam.startsWith("SIM_") ||
+      callSidParam.startsWith("CA_test_")
+    );
+
+    // 1. Enforce Twilio signature verification for real PSTN calls, rate-limiting for simulations
+    if (isSimulated) {
+      const clientIp = getClientIp(req);
+      const rateCheck = checkRateLimit(clientIp, "voice_sim_status", 40, 60 * 1000);
+      if (!rateCheck.success) {
+        return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+      }
+    } else {
+      const sigCheck = verifyTwilioWebhook(req, bodyParams);
+      if (!sigCheck.valid) {
+        console.warn(`[Voice Status] Rejected invalid signature: ${sigCheck.reason}`);
+        return NextResponse.json(
+          { error: "Unauthorized", reason: sigCheck.reason },
+          { status: sigCheck.statusCode || 401 }
+        );
+      }
     }
 
     const parsed = TwilioStatusCallbackSchema.safeParse(bodyParams);

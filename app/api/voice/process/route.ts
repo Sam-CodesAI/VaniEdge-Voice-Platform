@@ -22,6 +22,7 @@ import {
 import { TwiMLBuilder } from "@/lib/telephony/twiml-builder";
 import { TwilioVoiceWebhookSchema } from "@/lib/telephony/types";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -33,10 +34,28 @@ export async function POST(req: NextRequest) {
   try {
     const bodyParams = await parseTelephonyRequestBody(req);
 
-    const sigCheck = verifyTwilioWebhook(req, bodyParams);
-    if (!sigCheck.valid) {
-      console.warn(`[Voice Process] Rejected webhook: ${sigCheck.reason}`);
-      return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+    // Distinguish in-browser simulation calls (WebRTC studio & DTMF simulator) from real carrier PSTN calls
+    const isSimulated = Boolean(
+      bodyParams.isSimulated === "true" ||
+      (bodyParams.isSimulated as unknown) === true ||
+      req.headers.get("x-vaniedge-simulation") === "true" ||
+      callSid.startsWith("WEBRTC_") ||
+      callSid.startsWith("SIM_") ||
+      callSid.startsWith("CA_test_")
+    );
+
+    if (isSimulated) {
+      const clientIp = getClientIp(req);
+      const rateCheck = checkRateLimit(clientIp, "voice_sim_process", 40, 60 * 1000);
+      if (!rateCheck.success) {
+        return new Response("Too Many Requests", { status: 429 });
+      }
+    } else {
+      const sigCheck = verifyTwilioWebhook(req, bodyParams);
+      if (!sigCheck.valid) {
+        console.warn(`[Voice Process] Rejected webhook: ${sigCheck.reason}`);
+        return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+      }
     }
 
     const parsed = TwilioVoiceWebhookSchema.safeParse(bodyParams);
@@ -56,6 +75,7 @@ export async function POST(req: NextRequest) {
         tenantId: tenant.id,
         from: (bodyParams.From as string) || (bodyParams.from as string) || "+10000000000",
         to: (bodyParams.To as string) || (bodyParams.to as string) || tenant.phone,
+        isSimulated,
       });
     }
 

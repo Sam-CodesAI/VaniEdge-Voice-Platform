@@ -70,6 +70,7 @@ export function createCallSession(params: {
   from: string;
   to: string;
   direction?: "inbound" | "outbound";
+  isSimulated?: boolean;
 }): CallSession {
   const session: CallSession = {
     callSid: params.callSid,
@@ -83,6 +84,12 @@ export function createCallSession(params: {
     failoverTriggered: false,
     smsRescueSent: false,
     whatsappRescueSent: false,
+    isSimulated: Boolean(
+      params.isSimulated ||
+      params.callSid.startsWith("SIM_") ||
+      params.callSid.startsWith("WEBRTC_") ||
+      params.callSid.startsWith("CA_test_")
+    ),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -295,6 +302,16 @@ export async function executeTier4SmsRescue(params: {
   // Avoid texting landlines or empty numbers
   if (!session.from || session.from.length < 10) {
     return { success: false, reason: "Invalid caller phone number for SMS." };
+  }
+
+  // Handle simulated / browser demo calls gracefully without requiring live carrier Twilio credits
+  if (session.isSimulated) {
+    session.failoverTriggered = true;
+    session.failoverReason = reason;
+    session.smsRescueSent = true;
+    transitionCallPhase(session, "sms_rescued");
+    appendTranscript(session, "system", `[Tier 4 Simulated SMS Rescue Sent] to ${session.from}`);
+    return { success: true, reason: "simulated_success" };
   }
 
   session.failoverTriggered = true;

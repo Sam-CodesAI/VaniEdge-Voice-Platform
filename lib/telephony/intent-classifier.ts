@@ -347,10 +347,10 @@ Respond with STRICT JSON format only:
     }
   }
 
-  // 3. Multi-Provider Failover: Google Generative AI (gemini-2.0-flash -> gemini-1.5-flash)
+  // 3. Multi-Provider Failover: Google Generative AI (gemini-2.5-flash -> gemini-2.0-flash -> gemini-1.5-flash)
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    const geminiModels = ["gemini-2.0-flash", "gemini-1.5-flash"];
+    const geminiModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
     for (const model of geminiModels) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);

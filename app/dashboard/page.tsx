@@ -226,6 +226,9 @@ export default function BusinessDashboardPage() {
   const [forwardingModalOpen, setForwardingModalOpen] = useState<boolean>(false);
   const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
   const [copiedSid, setCopiedSid] = useState<string | null>(null);
+  const [callSearchQuery, setCallSearchQuery] = useState<string>("");
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<string>("ALL");
+  const [ticketSearchQuery, setTicketSearchQuery] = useState<string>("");
 
   // Load Auth and Data
   const loadDashboardData = useCallback(async () => {
@@ -310,6 +313,30 @@ export default function BusinessDashboardPage() {
   const rescuedCalls = calls.filter((c) => c.smsRescueSent || c.phase === "sms_rescued").length;
   const avgLatency =
     calls.reduce((acc, c) => acc + (c.latencyMs?.total || 16.5), 0) / (totalCalls || 1);
+
+  const filteredCalls = calls.filter((c) => {
+    if (!callSearchQuery.trim()) return true;
+    const q = callSearchQuery.toLowerCase().trim();
+    return (
+      c.from.toLowerCase().includes(q) ||
+      c.to.toLowerCase().includes(q) ||
+      c.callSid.toLowerCase().includes(q) ||
+      c.transcript?.some((t) => t.text.toLowerCase().includes(q))
+    );
+  });
+
+  const filteredTickets = tickets.filter((t) => {
+    if (ticketStatusFilter !== "ALL" && t.status !== ticketStatusFilter) return false;
+    if (!ticketSearchQuery.trim()) return true;
+    const q = ticketSearchQuery.toLowerCase().trim();
+    return (
+      t.callerName.toLowerCase().includes(q) ||
+      t.callerPhone.toLowerCase().includes(q) ||
+      t.serviceType.toLowerCase().includes(q) ||
+      t.details.toLowerCase().includes(q) ||
+      t.ticketId.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-[#070709] text-gray-100 selection:bg-blue-600/30">
@@ -528,26 +555,46 @@ export default function BusinessDashboardPage() {
         {/* TAB 1: CALL LOGS */}
         {activeTab === "calls" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold font-oswald uppercase text-white tracking-wide">
-                Live Inbound Voice Dialogues
-              </h2>
-              <button
-                onClick={loadDashboardData}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-colors"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-                Refresh Calls
-              </button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold font-oswald uppercase text-white tracking-wide">
+                  Live Inbound Voice Dialogues
+                </h2>
+                <p className="text-xs text-gray-400">
+                  Showing {filteredCalls.length} of {calls.length} calls
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={callSearchQuery}
+                  onChange={(e) => setCallSearchQuery(e.target.value)}
+                  placeholder="Filter by phone, CallSid, or transcript..."
+                  className="bg-black/60 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full sm:w-64"
+                />
+                <button
+                  onClick={loadDashboardData}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-colors shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                  Refresh Calls
+                </button>
+              </div>
             </div>
 
             <div className="bg-[#0f0f14] border border-white/10 rounded-xl overflow-hidden divide-y divide-white/5">
-              {calls.map((call) => {
-                const isExpanded = selectedCallSid === call.callSid;
-                const formattedDate = new Date(call.createdAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+              {filteredCalls.length === 0 ? (
+                <div className="p-8 text-center text-xs text-gray-500">
+                  No matching calls found for &quot;{callSearchQuery}&quot;.
+                </div>
+              ) : (
+                filteredCalls.map((call) => {
+                  const isExpanded = selectedCallSid === call.callSid;
+                  const formattedDate = new Date(call.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
 
                 return (
                   <div key={call.callSid} className="transition-colors hover:bg-white/[0.02]">
@@ -661,7 +708,8 @@ export default function BusinessDashboardPage() {
                     )}
                   </div>
                 );
-              })}
+              })
+            )}
             </div>
           </div>
         )}
@@ -669,25 +717,62 @@ export default function BusinessDashboardPage() {
         {/* TAB 2: TICKETS & LEADS */}
         {activeTab === "tickets" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold font-oswald uppercase text-white tracking-wide">
-                Dispatched Client Bookings & Service Requests
-              </h2>
-              <button
-                onClick={loadDashboardData}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-colors"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-                Refresh Leads
-              </button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold font-oswald uppercase text-white tracking-wide">
+                  Dispatched Client Bookings & Service Requests
+                </h2>
+                <p className="text-xs text-gray-400">
+                  Showing {filteredTickets.length} of {tickets.length} tickets
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={ticketSearchQuery}
+                  onChange={(e) => setTicketSearchQuery(e.target.value)}
+                  placeholder="Filter by caller, service, or ticket ID..."
+                  className="bg-black/60 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-full sm:w-64"
+                />
+                <button
+                  onClick={loadDashboardData}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 transition-colors shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                  Refresh Leads
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tickets.map((t) => (
-                <div
-                  key={t.ticketId}
-                  className="p-5 rounded-xl bg-[#0f0f14] border border-white/10 flex flex-col justify-between space-y-4 hover:border-white/20 transition-colors"
+            {/* Status Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+              {(["ALL", "PENDING", "CONFIRMED", "DISPATCHED", "COMPLETED"] as const).map((statusKey) => (
+                <button
+                  key={statusKey}
+                  onClick={() => setTicketStatusFilter(statusKey)}
+                  className={`px-3 py-1 rounded-full font-medium transition-colors cursor-pointer shrink-0 ${
+                    ticketStatusFilter === statusKey
+                      ? "bg-blue-600 text-white font-bold"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  }`}
                 >
+                  {statusKey === "ALL" ? `All (${tickets.length})` : `${statusKey} (${tickets.filter((t) => t.status === statusKey).length})`}
+                </button>
+              ))}
+            </div>
+
+            {filteredTickets.length === 0 ? (
+              <div className="p-12 text-center text-xs text-gray-500 bg-[#0f0f14] border border-white/10 rounded-xl">
+                No matching dispatch tickets found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredTickets.map((t) => (
+                  <div
+                    key={t.ticketId}
+                    className="p-5 rounded-xl bg-[#0f0f14] border border-white/10 flex flex-col justify-between space-y-4 hover:border-white/20 transition-colors"
+                  >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-xs font-bold text-blue-400">
@@ -777,6 +862,7 @@ export default function BusinessDashboardPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
 

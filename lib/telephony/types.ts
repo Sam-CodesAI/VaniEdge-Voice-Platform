@@ -182,6 +182,7 @@ export interface CallSession {
   smsRescueSent: boolean;
   whatsappRescueSent: boolean;
   recordingUrl?: string;
+  isSimulated?: boolean;
   createdAt: number;
   updatedAt: number;
 }
