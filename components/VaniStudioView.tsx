@@ -341,7 +341,8 @@ export default function VaniStudioView({
 
   // Copy cURL
   const handleCopyCurl = () => {
-    const curlCmd = `curl -X POST https://vaniedge.vercel.app/api/chat \\
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://vaniedge.vercel.app";
+    const curlCmd = `curl -X POST ${origin}/api/chat \\
   -H "Content-Type: application/json" \\
   -d '{
     "message": "${customQuery || "Book a consultation appointment for tomorrow at 10 AM"}",

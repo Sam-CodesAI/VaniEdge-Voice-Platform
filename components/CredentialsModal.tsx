@@ -127,7 +127,8 @@ export default function CredentialsModal({
     }
   };
 
-  const curlSnippet = `curl -X POST "https://vaniedge.vercel.app/api/dispatch" \\
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://vaniedge.vercel.app";
+  const curlSnippet = `curl -X POST "${origin}/api/dispatch" \\
   -H "Authorization: Bearer ${credentials.apiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{

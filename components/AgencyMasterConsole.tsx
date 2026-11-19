@@ -17,8 +17,54 @@ interface Tenant {
   brandColor?: string;
 }
 
-export function AgencyMasterConsole() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+interface AgencyMasterConsoleProps {
+  onOpenAuth?: (mode: "signin" | "signup") => void;
+  currentUser?: { name?: string; email?: string } | null;
+}
+
+const DEMO_AGENCY_TENANTS: Tenant[] = [
+  {
+    id: "tnt_careplus_01",
+    name: "CarePlus Pediatric Clinic",
+    category: "clinic",
+    twilioPhone: "+91 80 4725 9000",
+    twilioSid: "AC_careplus_demo",
+    webhookUrl: "https://vaniedge.vercel.app/api/voice/incoming?tenantId=clinic-1",
+    monthlyCalls: 148,
+    status: "active",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
+    brandColor: "#0ea5e9",
+  },
+  {
+    id: "tnt_apexhvac_02",
+    name: "Apex 24/7 HVAC Emergency",
+    category: "auto",
+    twilioPhone: "+91 80 4725 9000",
+    twilioSid: "AC_apex_demo",
+    webhookUrl: "https://vaniedge.vercel.app/api/voice/incoming?tenantId=apex-hvac",
+    monthlyCalls: 312,
+    status: "active",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14).toISOString(),
+    brandColor: "#f59e0b",
+  },
+  {
+    id: "tnt_royalfeast_03",
+    name: "Royal Feast Kitchen & Dining",
+    category: "restaurant",
+    twilioPhone: "+91 80 4725 9000",
+    twilioSid: "AC_royal_demo",
+    webhookUrl: "https://vaniedge.vercel.app/api/voice/incoming?tenantId=restaurant-1",
+    monthlyCalls: 89,
+    status: "provisioning",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+    brandColor: "#10b981",
+  },
+];
+
+export function AgencyMasterConsole({ onOpenAuth, currentUser }: AgencyMasterConsoleProps = {}) {
+  const [tenants, setTenants] = useState<Tenant[]>(DEMO_AGENCY_TENANTS);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newClientName, setNewClientName] = useState("");
@@ -29,10 +75,19 @@ export function AgencyMasterConsole() {
   const [editLogo, setEditLogo] = useState("");
 
   const fetchTenants = async () => {
-    const res = await fetch("/api/agency/tenants");
-    if (res.ok) {
-      const data = (await res.json()) as { tenants: Tenant[] };
-      setTenants(data.tenants);
+    try {
+      const res = await fetch("/api/agency/tenants");
+      if (res.ok) {
+        const data = (await res.json()) as { tenants: Tenant[] };
+        setTenants(data.tenants || []);
+        setIsDemoMode(false);
+      } else {
+        setIsDemoMode(true);
+        setTenants(DEMO_AGENCY_TENANTS);
+      }
+    } catch {
+      setIsDemoMode(true);
+      setTenants(DEMO_AGENCY_TENANTS);
     }
   };
 
@@ -42,18 +97,31 @@ export function AgencyMasterConsole() {
 
   const handleProvision = async () => {
     setIsProvisioning(true);
-    const res = await fetch("/api/agency/tenants", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newClientName, category: newClientCat }),
-    });
-    
-    if (res.ok) {
-      await fetchTenants();
-      setShowModal(false);
-      setNewClientName("");
+    setProvisionError(null);
+    try {
+      const res = await fetch("/api/agency/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newClientName, category: newClientCat }),
+      });
+      
+      if (res.ok) {
+        await fetchTenants();
+        setShowModal(false);
+        setNewClientName("");
+      } else {
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+        if (res.status === 401) {
+          setProvisionError("Authentication required: Please sign in or register to provision production client infrastructure.");
+        } else {
+          setProvisionError(errJson.error || `Provisioning failed (HTTP ${res.status})`);
+        }
+      }
+    } catch (err) {
+      setProvisionError(err instanceof Error ? err.message : "Network error during provisioning");
+    } finally {
+      setIsProvisioning(false);
     }
-    setIsProvisioning(false);
   };
 
   const handleSaveSettings = async () => {
@@ -81,13 +149,37 @@ export function AgencyMasterConsole() {
           <p className="text-sm text-gray-400 mt-1">Manage active implementations and deploy 1-click infrastructure.</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+          onClick={() => {
+            setProvisionError(null);
+            setShowModal(true);
+          }}
+          className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Provision New Client
         </button>
       </div>
+
+      {/* Demo Preview Banner */}
+      {isDemoMode && (
+        <div className="bg-blue-950/40 border-b border-blue-500/20 px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-blue-200">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
+            <span>
+              <strong>Agency Demo Mode:</strong> Viewing preview enterprise tenants. Sign in to your agency account to provision and manage live client lines.
+            </span>
+          </div>
+          {onOpenAuth && (
+            <button
+              type="button"
+              onClick={() => onOpenAuth("signin")}
+              className="px-3 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 font-medium transition-colors shrink-0 cursor-pointer"
+            >
+              Sign In to Deploy Live
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/10 border-b border-white/10">
@@ -222,6 +314,25 @@ export function AgencyMasterConsole() {
                   <option value="general">General Reception</option>
                 </select>
               </div>
+
+              {provisionError && (
+                <div className="p-3 rounded-lg bg-red-950/60 border border-red-500/40 text-xs text-red-200">
+                  <p className="font-semibold mb-1">Provisioning Error:</p>
+                  <p>{provisionError}</p>
+                  {onOpenAuth && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowModal(false);
+                        onOpenAuth("signin");
+                      }}
+                      className="mt-2 text-xs underline text-blue-300 hover:text-white"
+                    >
+                      Click here to sign in now →
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="p-6 border-t border-white/10 bg-black/40 flex justify-end gap-3">
               <button
