@@ -13,6 +13,7 @@ console.log(`  Twilio Telephony:     ${report.configuredProviders.twilio ? "✅ 
 console.log(`  ElevenLabs Voice AI:  ${report.configuredProviders.elevenlabs ? "✅ Configured" : "⚠️  Missing API Key (Local fallback)"}`);
 console.log(`  Supabase PostgreSQL:  ${report.configuredProviders.supabase ? "✅ Configured" : "ℹ️  Offline (Resilient local disk cache active)"}`);
 console.log(`  AWS Polly:            ${report.configuredProviders.awsPolly ? "✅ Configured" : "ℹ️  Optional"}`);
+console.log(`  Telegram Alerts:      ${report.configuredProviders.telegram ? "✅ Configured" : "ℹ️  Optional (Push notifications)"}`);
 console.log("--------------------------------------------------------------------------------");
 
 if (report.warnings.length > 0) {

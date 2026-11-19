@@ -18,7 +18,7 @@ All commands use `pnpm` (Node.js 22 LTS).
 | `pnpm dev:worker` | Start local Cloudflare Worker development runtime via Wrangler |
 | `pnpm typecheck` | Static TypeScript analysis (`tsc --noEmit`) |
 | `pnpm build:ts` | Compile and verify Cloudflare Worker TypeScript (`wrangler deploy --dry-run`) |
-| `pnpm test` | Run automated test suite (60 tests across 8 suites) |
+| `pnpm test` | Run automated test suite (70 tests across 9 suites) |
 | `pnpm build` | Compile production Next.js 16 application with Turbopack |
 
 ---
@@ -59,15 +59,16 @@ VaniEdge-Voice-Platform/
 │   └── dispatch/                     # Ticket dispatcher & emergency routing
 ├── supabase/migrations/              # Durable database schema definitions
 │   └── 20261027_vaniedge_auth.sql    # Users, sessions, tenants, tickets, call sessions, idempotency
-└── test/                             # Automated test suite (60 tests across 8 suites)
-    ├── auth-security.test.ts         # Scrypt hashing, constant-time verification, sessions
-    ├── durable-persistence.test.ts   # Database resilience & fallback persistence
+└── test/                             # Automated test suite (70 tests across 9 suites)
+    ├── auth-store.test.ts            # Scrypt hashing, constant-time verification, durable sessions
+    ├── business-claims.test.ts       # Honest status reporting, simulation labeling, multi-lingual SMS
     ├── e2e-failure-benchmark.test.ts # Measured timeout deadlines & burst distribution
     ├── production-readiness.test.ts  # Startup assertions, outage rollback, cross-tenant, TTS/Metrics
     ├── rate-limit.test.ts            # Sliding-window rate limiting & IP extraction
-    ├── telephony-failover.test.ts    # 4-tier state machine transitions & TwiML
+    ├── sutradb.test.ts               # Hybrid lexical/dense search & in-memory LRU cache
     ├── tenant-isolation.test.ts      # Multi-tenant IDOR protection & credential scrubbing
-    └── twilio-webhook-verification.test.ts # Fail-closed HMAC-SHA1 signatures
+    ├── watchdog-failover.test.ts     # 4-tier state machine transitions & TwiML
+    └── webhook-security.test.ts      # Fail-closed HMAC-SHA1 signatures & replay deduplication
 ```
 
 ---

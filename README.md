@@ -228,7 +228,7 @@ pnpm run dev:worker
 The repository contains an automated test suite verifying security controls, webhook signatures, tenant isolation, rate limiting, and end-to-end failure benchmarks.
 
 ```bash
-# Run all automated tests (60 tests across 8 test suites):
+# Run all automated tests (70 tests across 9 test suites):
 pnpm test
 
 # Run TypeScript static typechecking:

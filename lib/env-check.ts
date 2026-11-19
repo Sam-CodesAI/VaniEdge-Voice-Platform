@@ -15,6 +15,7 @@ export interface EnvValidationReport {
     elevenlabs: boolean;
     supabase: boolean;
     awsPolly: boolean;
+    telegram: boolean;
   };
 }
 
@@ -36,6 +37,7 @@ export function validateEnvironment(): EnvValidationReport {
   const hasSupabase = hasSupabaseUrl && hasSupabaseKey;
 
   const hasPolly = Boolean(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+  const hasTelegram = Boolean(process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_ADMIN_CHAT_ID);
 
   if (isProduction) {
     if (!hasTwilioToken) {
@@ -70,6 +72,7 @@ export function validateEnvironment(): EnvValidationReport {
       elevenlabs: hasElevenLabs,
       supabase: hasSupabase,
       awsPolly: hasPolly,
+      telegram: hasTelegram,
     },
   };
 }
