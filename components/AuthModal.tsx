@@ -76,8 +76,8 @@ export default function AuthModal({
       return;
     }
 
-    if (!password || password.length < 6) {
-      setError("Password must contain at least 6 characters.");
+    if (!password || password.length < 8) {
+      setError("Password must contain at least 8 characters.");
       return;
     }
 

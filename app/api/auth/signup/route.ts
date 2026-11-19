@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authDb } from "@/lib/auth-store";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { sendTelegramAdminAlert } from "@/lib/telegram-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,15 @@ export async function POST(req: Request) {
     );
 
     const safeUser = authDb.safeUser(user);
+
+    // Push instant notification to Samarth's Telegram
+    void sendTelegramAdminAlert({
+      type: "NEW_SIGNUP",
+      callerName: name,
+      contact: email,
+      businessName: company,
+      details: `User created account on VaniEdge Voice Platform with role: ${user.role}`,
+    });
 
     const response = NextResponse.json(
       {

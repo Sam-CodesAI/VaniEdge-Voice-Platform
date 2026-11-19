@@ -269,6 +269,19 @@ export default function PricingSection() {
           <p className="text-xs text-black font-medium max-w-xl mx-auto">
             Zero setup fees. Immediate trunk provisioning in under 24 hours. Includes dedicated Telegram engineer support.
           </p>
+
+          <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <span className="text-xs font-bold text-slate-700 font-oswald uppercase">Prefer a live strategy consultation before subscribing?</span>
+            <a
+              href="https://cal.com/sam-codesai/15min"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-oswald uppercase font-bold transition-all shadow-sm"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span>Book 15-Min Setup Call with Samarth</span>
+            </a>
+          </div>
         </div>
       </div>
     </section>

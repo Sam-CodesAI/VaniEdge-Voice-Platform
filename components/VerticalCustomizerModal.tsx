@@ -36,6 +36,7 @@ export default function VerticalCustomizerModal({
   onDeployToStudio,
 }: VerticalCustomizerModalProps) {
   const [step, setStep] = useState<number>(1);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<BusinessCategory>("clinic");
   const [businessName, setBusinessName] = useState<string>("Dr. Sharma Healthcare & Clinic");
   const [operatingHours, setOperatingHours] = useState<string>("9:00 AM - 8:30 PM (Mon - Sat)");
@@ -47,10 +48,34 @@ export default function VerticalCustomizerModal({
 
   if (!isOpen) return null;
 
-  const handleNext = () => setStep((prev) => Math.min(prev + 1, 3));
+  const handleNext = () => setStep((prev) => Math.min(prev + 1, 4));
   const handleBack = () => setStep((prev) => Math.max(prev - 1, 1));
 
-  const handleFinishDeploy = () => {
+  const handleFinishDeploy = async () => {
+    setIsSubmitting(true);
+    try {
+      // Fire lead capture & Telegram push notification asynchronously
+      void fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "LEAD_CUSTOMIZER",
+          businessName,
+          category: selectedCategory,
+          language: selectedLanguage,
+          contact: escalationPhone,
+          details: `Hours: ${operatingHours} | Services: ${servicesText}`,
+        }),
+      });
+    } catch {
+      // Non-blocking
+    } finally {
+      setIsSubmitting(false);
+      setStep(4);
+    }
+  };
+
+  const handleLaunchStudio = () => {
     onDeployToStudio({
       category: selectedCategory,
       businessName,
@@ -89,7 +114,7 @@ export default function VerticalCustomizerModal({
         </div>
 
         {/* Step Progression Bar */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <div
             className={`h-2 rounded-full transition-all ${
               step >= 1 ? "bg-black" : "bg-slate-200"
@@ -103,6 +128,11 @@ export default function VerticalCustomizerModal({
           <div
             className={`h-2 rounded-full transition-all ${
               step >= 3 ? "bg-black" : "bg-slate-200"
+            }`}
+          />
+          <div
+            className={`h-2 rounded-full transition-all ${
+              step >= 4 ? "bg-emerald-600" : "bg-slate-200"
             }`}
           />
         </div>
@@ -248,9 +278,71 @@ export default function VerticalCustomizerModal({
           </div>
         )}
 
+        {/* Step 4: Celebration & Live Activation */}
+        {step === 4 && (
+          <div className="space-y-5 animate-in fade-in duration-300">
+            <div className="p-6 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-center space-y-3">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 border-2 border-emerald-500 mx-auto flex items-center justify-center text-2xl shadow-sm">
+                🎉
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold font-oswald uppercase text-black">
+                {businessName} Voice Receptionist Is Provisioned!
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-700 font-medium max-w-lg mx-auto">
+                Your custom service offerings, operating hours, and SutraDB vector memory are loaded and ready to answer calls 24/7 with zero dropped calls.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-4 rounded-xl bg-slate-50 border-2 border-slate-200 space-y-1.5">
+                <span className="font-bold text-black uppercase font-oswald tracking-wide flex items-center gap-1.5 text-xs">
+                  <Phone className="w-3.5 h-3.5 text-blue-600" />
+                  Live PSTN Carrier Test Line
+                </span>
+                <p className="font-mono font-bold text-sm text-black">+1 (814) 961-3703</p>
+                <p className="text-[11px] text-slate-500 font-medium">Dial from any standard phone to test our carrier stream live.</p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 border-2 border-slate-200 space-y-1.5">
+                <span className="font-bold text-black uppercase font-oswald tracking-wide flex items-center gap-1.5 text-xs">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  Missed Call Forwarding Code
+                </span>
+                <p className="font-mono font-bold text-sm text-emerald-800">*71*+18149613703</p>
+                <p className="text-[11px] text-slate-500 font-medium">Enter this code on your phone to forward unanswered calls to your AI receptionist.</p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div>
+                <p className="font-bold text-blue-950 font-oswald uppercase text-sm">Want Dedicated SIP Numbers &amp; Multi-Tenant Setup?</p>
+                <p className="text-blue-800 text-[11px]">Book a 15-minute deployment call or connect directly with our engineering desk.</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href="https://cal.com/sam-codesai/15min"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold font-oswald uppercase text-xs transition-colors flex items-center gap-1.5"
+                >
+                  <span>Book Setup Call</span>
+                </a>
+                <a
+                  href="https://t.me/Samarth1306"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2 rounded-xl bg-white border border-blue-300 text-blue-900 hover:bg-blue-100 font-bold font-oswald uppercase text-xs transition-colors"
+                >
+                  Telegram
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Footer Navigation Buttons */}
         <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-          {step > 1 ? (
+          {step > 1 && step < 4 ? (
             <button
               type="button"
               onClick={handleBack}
@@ -272,17 +364,27 @@ export default function VerticalCustomizerModal({
               <span>Next Step</span>
               <ArrowRight className="w-4 h-4" />
             </button>
-          ) : (
+          ) : step === 3 ? (
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleFinishDeploy}
-                className="px-5 py-2.5 rounded-xl bg-black hover:bg-slate-800 text-white font-bold font-oswald uppercase text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+                className="px-5 py-2.5 rounded-xl bg-black hover:bg-slate-800 text-white font-bold font-oswald uppercase text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
               >
                 <Bot className="w-4 h-4 text-emerald-400" />
-                <span>Deploy &amp; Test in Studio</span>
+                <span>{isSubmitting ? "Provisioning..." : "Provision & Activate"}</span>
               </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleLaunchStudio}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-oswald uppercase text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md active:scale-95 ml-auto"
+            >
+              <Bot className="w-4 h-4" />
+              <span>Test Voice Call in Studio Now</span>
+            </button>
           )}
         </div>
       </div>
