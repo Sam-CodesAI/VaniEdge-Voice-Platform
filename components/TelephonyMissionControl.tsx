@@ -83,7 +83,7 @@ const AUDITED_STAGES: LatencyStage[] = [
     startTimeSec: 0.0,
     endTimeSec: 0.8,
     speaker: "system",
-    dialogue: "📞 Inbound call from +91-98765-43210 to +1-814-961-3703 received by carrier gateway.",
+    dialogue: "📞 Inbound call from +91-98765-43210 to +91-80-4725-9000 received by carrier gateway.",
   },
   {
     id: 2,
@@ -344,7 +344,7 @@ export function TelephonyMissionControl({
     const payload = {
       callSid: "CA" + Math.random().toString(16).substring(2, 14),
       caller: "+91-98765-43210",
-      inboundLine: "+1-814-961-3703",
+      inboundLine: "+91-80-4725-9000",
       totalDurationSeconds: 18.4,
       watchdogStatus: "HEALTHY",
       droppedCalls: 0,
@@ -730,7 +730,7 @@ export function TelephonyMissionControl({
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
                 <h4 className="text-base sm:text-lg font-bold text-black font-oswald uppercase">
-                  Audited Inbound PSTN Call Recording (+1 814 961-3703)
+                  Audited Inbound PSTN Call Recording (+91 80 4725 9000)
                 </h4>
               </div>
               <p className="text-xs text-black font-medium mt-1">

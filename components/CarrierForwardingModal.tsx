@@ -32,6 +32,38 @@ interface CarrierGuide {
 
 const CARRIERS: CarrierGuide[] = [
   {
+    carrier: "Reliance Jio",
+    country: "India",
+    tag: "Top Indian VoLTE",
+    enableCode: "*409*",
+    disableCode: "*410",
+    notes: "Conditional forward when unanswered/busy: dial *409* followed by 10-digit number. For 24/7 unconditional forward, use *401*. Cancel with *410.",
+  },
+  {
+    carrier: "Bharti Airtel",
+    country: "India",
+    tag: "Top Indian 4G/5G",
+    enableCode: "*71*",
+    disableCode: "*70",
+    notes: "Conditional forward when unreachable or busy: dial *71* followed by 10-digit number. Cancel anytime by dialing *70 or ##002#.",
+  },
+  {
+    carrier: "Vodafone Idea (Vi)",
+    country: "India",
+    tag: "GSM Standard",
+    enableCode: "**61*<number>#",
+    disableCode: "##002#",
+    notes: "Standard GSM call forward when no answer. Cancel all forwards with ##002#.",
+  },
+  {
+    carrier: "BSNL",
+    country: "India",
+    tag: "National Carrier",
+    enableCode: "*21*",
+    disableCode: "##21#",
+    notes: "Standard call forward on BSNL lines. Dial *21* followed by phone number and press call. Cancel with ##21#.",
+  },
+  {
     carrier: "Verizon Wireless",
     country: "USA",
     tag: "Most Popular US",
@@ -55,36 +87,12 @@ const CARRIERS: CarrierGuide[] = [
     disableCode: "##004#",
     notes: "Standard GSM conditional forward. Dial ##004# to cancel all forward rules.",
   },
-  {
-    carrier: "Reliance Jio",
-    country: "India",
-    tag: "4G/5G VoLTE",
-    enableCode: "*409*",
-    disableCode: "*410",
-    notes: "Conditional forward when unanswered/busy. Use *401* for 24/7 immediate forward. Cancel with *410.",
-  },
-  {
-    carrier: "Airtel",
-    country: "India",
-    tag: "GSM Standard",
-    enableCode: "*71*",
-    disableCode: "*70",
-    notes: "Conditional forward when unreachable or busy. Cancel anytime by dialing *70 or ##002#.",
-  },
-  {
-    carrier: "Vodafone Idea (Vi)",
-    country: "India",
-    tag: "GSM Standard",
-    enableCode: "**61*<number>#",
-    disableCode: "##002#",
-    notes: "Standard GSM call forward when no answer. Cancel all forwards with ##002#.",
-  },
 ];
 
 export default function CarrierForwardingModal({
   isOpen,
   onClose,
-  targetPhone = "+18149613703",
+  targetPhone = "+918047259000",
 }: CarrierForwardingModalProps) {
   const [selectedCarrierIndex, setSelectedCarrierIndex] = useState<number>(0);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);

@@ -18,7 +18,7 @@
 > **Live Production Next.js Studio:** [vaniedge.vercel.app](https://vaniedge.vercel.app)  
 > **Interactive Voice Agent Mission Control:** [vaniedge.vercel.app/demos/voice-agent](https://vaniedge.vercel.app/demos/voice-agent)  
 > **Cloudflare Edge Telephony Bridge:** [twilio-voice-agent-failover.sam-codes.workers.dev](https://twilio-voice-agent-failover.sam-codes.workers.dev)  
-> **PSTN Telephony Line:** `+1 (814) 961-3703`  
+> **PSTN Telephony Line:** `+91 80 4725 9000`  
 > **GitHub Repository:** [github.com/Sam-CodesAI/VaniEdge-Voice-Platform](https://github.com/Sam-CodesAI/VaniEdge-Voice-Platform)
 
 ---

@@ -299,7 +299,7 @@ export default function VerticalCustomizerModal({
                   <Phone className="w-3.5 h-3.5 text-blue-600" />
                   Live PSTN Carrier Test Line
                 </span>
-                <p className="font-mono font-bold text-sm text-black">+1 (814) 961-3703</p>
+                <p className="font-mono font-bold text-sm text-black">+91 80 4725 9000</p>
                 <p className="text-[11px] text-slate-500 font-medium">Dial from any standard phone to test our carrier stream live.</p>
               </div>
 
@@ -308,7 +308,7 @@ export default function VerticalCustomizerModal({
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                   Missed Call Forwarding Code
                 </span>
-                <p className="font-mono font-bold text-sm text-emerald-800">*71*+18149613703</p>
+                <p className="font-mono font-bold text-sm text-emerald-800">*409*8047259000 (Jio) / *71*8047259000 (Airtel)</p>
                 <p className="text-[11px] text-slate-500 font-medium">Enter this code on your phone to forward unanswered calls to your AI receptionist.</p>
               </div>
             </div>

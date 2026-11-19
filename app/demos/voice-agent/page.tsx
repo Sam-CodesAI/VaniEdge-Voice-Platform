@@ -69,11 +69,11 @@ export default function VoiceAgentMissionControlPage() {
           {/* Live Twilio Line Badge */}
           <div className="flex items-center gap-2">
             <a
-              href="tel:+18149613703"
+              href="tel:+918047259000"
               className="px-4 py-2 rounded-2xl bg-slate-900 border border-amber-500/40 hover:border-amber-400 text-amber-300 text-xs font-mono font-medium flex items-center gap-2 transition-all hover:bg-amber-500/10 shadow-lg shadow-amber-500/10"
             >
               <PhoneCall className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-              <span>Live Line: +1 (814) 961-3703</span>
+              <span>Live Line: +91 80 4725 9000</span>
               <ExternalLink className="w-3 h-3 text-slate-500" />
             </a>
           </div>

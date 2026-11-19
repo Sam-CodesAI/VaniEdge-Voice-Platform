@@ -154,8 +154,8 @@ Configure the failover watchdog invariants in `wrangler.toml` or the edge enviro
 [vars]
 FAILOVER_CONNECT_TIMEOUT_MS = "1200"
 FAILOVER_TTFT_TIMEOUT_MS = "1500"
-FALLBACK_HUMAN_NUMBER = "+18005550199"   # Client's actual staff line
-TWILIO_PHONE_NUMBER = "+18149613703"
+FALLBACK_HUMAN_NUMBER = "+916361209256"   # Client's actual staff line
+TWILIO_PHONE_NUMBER = "+918047259000"
 ```
 
 ### Verification Test:

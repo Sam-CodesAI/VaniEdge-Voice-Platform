@@ -14,11 +14,11 @@ const mockTenant = {
   id: "tnt_benchmark_001",
   name: "Apex Healthcare Benchmark",
   industry: "healthcare",
-  phone: "+18149613703",
+  phone: "+918047259000",
   emergencyNumbers: {
-    primaryDispatcher: "+18005550199",
-    onCallTechnician: "+18005550199",
-    officeFallback: "+18005550198",
+    primaryDispatcher: "+916361209256",
+    onCallTechnician: "+916361209256",
+    officeFallback: "+918550816706",
   },
   businessHours: {
     timezone: "America/New_York",

@@ -26,11 +26,18 @@ export interface SmsSendResult {
 
 /**
  * Normalizes phone numbers to standard E.164 digits format.
+ * Supports both Indian (+91 for 10-digit numbers starting with 6-9) and US/International numbers.
  */
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/[^\d+]/g, "");
-  if (!digits.startsWith("+") && digits.length === 10) {
-    return `+1${digits}`;
+  if (!digits.startsWith("+")) {
+    if (digits.length === 10) {
+      // Indian mobile numbers start with 6, 7, 8, or 9
+      if (/^[6-9]/.test(digits)) {
+        return `+91${digits}`;
+      }
+      return `+1${digits}`;
+    }
   }
   return digits;
 }

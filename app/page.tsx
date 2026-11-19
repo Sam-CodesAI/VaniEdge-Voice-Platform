@@ -1024,7 +1024,7 @@ export default function VaniEdgePage() {
       <CarrierForwardingModal
         isOpen={forwardingModalOpen}
         onClose={() => setForwardingModalOpen(false)}
-        targetPhone="+18149613703"
+        targetPhone="+918047259000"
       />
     </div>
   );

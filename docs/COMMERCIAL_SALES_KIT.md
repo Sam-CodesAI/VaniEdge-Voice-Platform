@@ -1,7 +1,7 @@
 # VaniEdge Voice AI — Commercial B2B Sales Kit & Winning Pitch Runbook
 **Author:** Samarth Kallappa Nimangre (`@Samarth1306` on Telegram, `https://cal.com/sam-codesai/15min`)  
 **Platform:** VaniEdge Pro Voice Telephony Platform (`https://vaniedge.vercel.app`)  
-**Live PSTN Direct Dial Number:** `+1 (814) 961-3703`  
+**Live PSTN Direct Dial Number:** `+91 80 4725 9000`  
 **Standard:** 2026 Commercial Speed & Zero Outbound DM Standard
 
 ---
@@ -60,7 +60,7 @@ Rather than hiring another $3,500/month front-desk receptionist, you can plug in
 4. **Dropped Call Rescue:** If a patient hangs up abruptly, the system automatically fires an SMS: *"Hi [Name], we noticed your call dropped. Would you like us to hold the 3:30 PM slot for Dr. Sharma?"*
 
 You can test the actual voice quality right now:
-- **Live Dial Line:** Dial `+1 (814) 961-3703` from any phone to talk to the live clinic agent.
+- **Live Dial Line:** Dial `+91 80 4725 9000` from any phone to talk to the live clinic agent.
 - **Web Demo & Dashboard:** Test the browser voice studio and real-time logs at https://vaniedge.vercel.app/dashboard
 
 If you'd like me to set this up for your clinic's hours and pricing, feel free to book a 15-min walkthrough directly on my calendar (https://cal.com/sam-codesai/15min) or send me a message on Telegram (@Samarth1306).
@@ -84,7 +84,7 @@ We engineered **VaniEdge** specifically to solve after-hours emergency triage wi
 - **5-Second Carrier Setup:** Dial `*71*<number>` on your Verizon/AT&T/T-Mobile line. Rings your cell first; forwards to AI only when you don't answer.
 
 Dial the live PSTN test number directly to hear how it handles an emergency:
-📞 **+1 (814) 961-3703** (Tell it your water heater exploded).
+📞 **+91 80 4725 9000** (Tell it your water heater exploded).
 Inspect the live dispatcher portal: https://vaniedge.vercel.app/dashboard
 
 If you want this configured for your company with custom dispatch rules and tech numbers, schedule a quick 15-min onboarding call: https://cal.com/sam-codesai/15min or reach out directly on Telegram: @Samarth1306.
@@ -107,7 +107,7 @@ We launched the **VaniEdge Agency Master Console** (`https://vaniedge.vercel.app
 - **High Margin Math:** Wholesale pricing at $499/mo for unlimited tenants; resell to 10 local businesses at $299/mo each = **$2,491/month net profit**.
 
 Check out the Master Console live: https://vaniedge.vercel.app/agency
-Test live PSTN voice: +1 (814) 961-3703
+Test live PSTN voice: +91 80 4725 9000
 
 Let's get your agency onboarded: book a 15-min strategy call at https://cal.com/sam-codesai/15min or ping me on Telegram (@Samarth1306).
 ```
@@ -117,7 +117,7 @@ Let's get your agency onboarded: book a 15-min strategy call at https://cal.com/
 ## Objection Handling Matrix
 
 ### Objection 1: "Will it sound like an annoying robotic phone menu (IVR)?"
-**Answer:** "No. Traditional IVRs force callers to press 1, press 2, and listen to recorded menus. VaniEdge uses sub-18ms edge speech streaming with natural human turn-taking, neural voice synthesis, and dynamic pause detection. Dial `+1 (814) 961-3703` right now on your phone and speak to it naturally as if you're speaking to a real clinic receptionist."
+**Answer:** "No. Traditional IVRs force callers to press 1, press 2, and listen to recorded menus. VaniEdge uses sub-18ms edge speech streaming with natural human turn-taking, neural voice synthesis, and dynamic pause detection. Dial `+91 80 4725 9000` right now on your phone and speak to it naturally as if you're speaking to a real clinic receptionist."
 
 ### Objection 2: "Do I have to switch my phone company or port my number?"
 **Answer:** "Zero porting. You keep your current business phone, SIM card, and carrier (Verizon, AT&T, T-Mobile, Jio, Airtel, Vi). All you do is dial your carrier's conditional forward code (`*71` or `*409*`) once. Your phone rings normally; if you or your staff cannot answer, VaniEdge picks up. You can toggle it off anytime with `*73` or `*410`."
@@ -136,6 +136,6 @@ Let's get your agency onboarded: book a 15-min strategy call at https://cal.com/
 When a client books on Cal.com or messages on Telegram:
 1. **Minute 0–5 (Discovery):** Ask for business name, office hours, top 5 common customer questions, and emergency technician phone number.
 2. **Minute 5–8 (Engine Configuration):** Open `https://vaniedge.vercel.app`, click **"Customize Engine"**, select their vertical, input their FAQs and phone number, and click **"Deploy Custom Agent"**.
-3. **Minute 8–10 (Carrier Forwarding):** Guide the client to dial their carrier's conditional forward code (`*71*+18149613703`) on their office phone.
+3. **Minute 8–10 (Carrier Forwarding):** Guide the client to dial their carrier's conditional forward code (`*409*8047259000` on Jio, `*71*8047259000` on Airtel) on their office phone.
 4. **Minute 10–12 (Verification Call):** Have the client place a test call from their personal mobile phone to their office number without answering. Confirm VaniEdge answers within 18ms and logs the call in their **Customer Portal** (`/dashboard`).
 5. **Minute 12–15 (Deal Closed):** Hand over client login credentials or add them to the Agency Console. Send payment link ($149–$249/mo).

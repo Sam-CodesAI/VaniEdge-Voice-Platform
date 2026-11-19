@@ -16,11 +16,11 @@ export const APEX_HVAC_PROFILE: TenantProfile = {
   id: "apex-hvac",
   name: "Apex Heating & Air Conditioning",
   industry: "home_services",
-  phone: process.env.TWILIO_PHONE_NUMBER || "+18149613703",
+  phone: process.env.TWILIO_PHONE_NUMBER || "+918047259000",
   emergencyNumbers: {
-    primaryDispatcher: "+13035550100",
-    onCallTechnician: "+13035550101",
-    officeFallback: "+13035550102",
+    primaryDispatcher: "+916361209256",
+    onCallTechnician: "+916361209256",
+    officeFallback: "+918550816706",
   },
   businessHours: {
     timezone: "America/Denver",
@@ -99,10 +99,10 @@ export const METRO_DENTAL_PROFILE: TenantProfile = {
   id: "metro-dental",
   name: "Metro Urgent Dental Center",
   industry: "healthcare",
-  phone: "+18149613704",
+  phone: "+918047259001",
   emergencyNumbers: {
-    primaryDispatcher: "+13035550200",
-    onCallTechnician: "+13035550201",
+    primaryDispatcher: "+916361209256",
+    onCallTechnician: "+916361209256",
   },
   businessHours: {
     timezone: "America/Denver",
@@ -153,10 +153,10 @@ export const PRECISION_PLUMBING_PROFILE: TenantProfile = {
   id: "precision-plumbing",
   name: "Precision Plumbing Pros",
   industry: "home_services",
-  phone: "+18149613705",
+  phone: "+918047259002",
   emergencyNumbers: {
-    primaryDispatcher: "+13035550300",
-    onCallTechnician: "+13035550301",
+    primaryDispatcher: "+916361209256",
+    onCallTechnician: "+916361209256",
   },
   businessHours: {
     timezone: "America/Denver",
@@ -208,10 +208,10 @@ export const OAKWOOD_LEGAL_PROFILE: TenantProfile = {
   id: "oakwood-legal",
   name: "Oakwood Legal Defense",
   industry: "professional",
-  phone: "+18149613706",
+  phone: "+918047259003",
   emergencyNumbers: {
-    primaryDispatcher: "+13035550400",
-    onCallTechnician: "+13035550401",
+    primaryDispatcher: "+916361209256",
+    onCallTechnician: "+916361209256",
   },
   businessHours: {
     timezone: "America/Denver",

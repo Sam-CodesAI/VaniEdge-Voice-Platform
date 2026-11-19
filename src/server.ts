@@ -19,8 +19,8 @@ export interface VaniEdgeServerConfig {
 export function createVaniEdgeHandler(config: VaniEdgeServerConfig = {}) {
   const engine = config.engine || new SutraHybridEngine();
   const dispatcher = config.dispatcher || new TicketDispatcher();
-  const fallbackNumber = config.fallbackNumber || "+18005550199";
-  const twilioPhoneNumber = config.twilioPhoneNumber || "+18149613703";
+  const fallbackNumber = config.fallbackNumber || "+916361209256";
+  const twilioPhoneNumber = config.twilioPhoneNumber || "+918047259000";
   const corsOrigin = config.corsOrigin || "*";
 
   const corsHeaders: Record<string, string> = {

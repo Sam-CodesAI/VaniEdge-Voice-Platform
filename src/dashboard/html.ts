@@ -9,8 +9,8 @@
 import type { Env } from '../types/env';
 
 export function renderDashboardHtml(env: Env, host: string): string {
-  const twilioPhone = env.TWILIO_PHONE_NUMBER || '+18149613703';
-  const humanFallback = env.FALLBACK_HUMAN_NUMBER || '+18005550199';
+  const twilioPhone = env.TWILIO_PHONE_NUMBER || '+918047259000';
+  const humanFallback = env.FALLBACK_HUMAN_NUMBER || '+916361209256';
   const connectTimeout = env.FAILOVER_CONNECT_TIMEOUT_MS || '1200';
   const ttftTimeout = env.FAILOVER_TTFT_TIMEOUT_MS || '1500';
   const agentId = env.ELEVENLABS_AGENT_ID || 'agent_4001m2pwsn0aenevxy6jyej6t1s1';
@@ -582,7 +582,7 @@ export function renderDashboardHtml(env: Env, host: string): string {
           <div class="flow-step">
             <div class="step-icon">👤</div>
             <div class="step-title">1. Customer Dials</div>
-            <div class="step-desc">Inbound phone call to +1 (814) 961-3703</div>
+            <div class="step-desc">Inbound phone call to +91 80 4725 9000</div>
           </div>
           <div class="flow-arrow">➔</div>
           <div class="flow-step">
@@ -624,7 +624,7 @@ export function renderDashboardHtml(env: Env, host: string): string {
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px;">
           <div style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
             <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">PSTN Telephony Line</div>
-            <div style="font-size: 16px; font-weight: 600; color: #38bdf8;">+1 (814) 961-3703</div>
+            <div style="font-size: 16px; font-weight: 600; color: #38bdf8;">+91 80 4725 9000</div>
           </div>
           <div style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05);">
             <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Zero-Drop SLA</div>

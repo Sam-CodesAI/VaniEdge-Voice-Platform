@@ -58,7 +58,7 @@ export function TelemetryStats({ activeCallsCount = 1 }: { activeCallsCount?: nu
           <PhoneCall className="w-4 h-4 text-amber-400 animate-pulse" />
         </div>
         <div className="text-lg font-bold font-mono text-amber-400 truncate">
-          +1 (814) 961-3703
+          +91 80 4725 9000
         </div>
         <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />

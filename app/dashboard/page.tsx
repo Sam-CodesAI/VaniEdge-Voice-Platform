@@ -73,8 +73,8 @@ const DEMO_CALLS: CallSession[] = [
   {
     callSid: "CA_live_dental_9918",
     tenantId: "careplus-clinic",
-    from: "+1 (415) 890-2134",
-    to: "+1 (814) 961-3703",
+    from: "+91 (984) 501-2345",
+    to: "+91 80 4725 9000",
     direction: "inbound",
     phase: "completed",
     latencyMs: { total: 14.8 },
@@ -100,7 +100,7 @@ const DEMO_CALLS: CallSession[] = [
       },
       {
         role: "caller",
-        text: "Yes, please! My name is Priya Mehta, and my number is 415-890-2134.",
+        text: "Yes, please! My name is Priya Mehta, and my number is 98450-12345.",
         timestamp: Date.now() - 1000 * 60 * 12 + 11000,
       },
       {
@@ -113,8 +113,8 @@ const DEMO_CALLS: CallSession[] = [
   {
     callSid: "CA_live_hvac_7741",
     tenantId: "apex-hvac",
-    from: "+1 (303) 555-0144",
-    to: "+1 (814) 961-3703",
+    from: "+91 (998) 018-8776",
+    to: "+91 80 4725 9000",
     direction: "inbound",
     phase: "completed",
     latencyMs: { total: 17.2 },
@@ -143,8 +143,8 @@ const DEMO_CALLS: CallSession[] = [
   {
     callSid: "CA_live_rescue_3301",
     tenantId: "apex-hvac",
-    from: "+1 (720) 412-8877",
-    to: "+1 (814) 961-3703",
+    from: "+91 (981) 123-3445",
+    to: "+91 80 4725 9000",
     direction: "inbound",
     phase: "sms_rescued",
     latencyMs: { total: 8.5 },
@@ -161,7 +161,7 @@ const DEMO_CALLS: CallSession[] = [
       },
       {
         role: "system",
-        text: "[Status Callback] Call hung up abruptly (< 8s). Omnichannel Tier 4 SMS Rescue automatically dispatched to +17204128877.",
+        text: "[Status Callback] Call hung up abruptly (< 8s). Omnichannel Tier 4 SMS Rescue automatically dispatched to +919811233445.",
         timestamp: Date.now() - 1000 * 60 * 119,
       },
     ],
@@ -172,13 +172,13 @@ const DEMO_TICKETS: TicketRecord[] = [
   {
     ticketId: "TCK-DENT-8821",
     callerName: "Priya Mehta",
-    callerPhone: "+1 (415) 890-2134",
+    callerPhone: "+91 (984) 501-2345",
     category: "clinic",
     serviceType: "Urgent Dental Consultation",
     details: "Severe molar tooth pain, requested 3:30 PM slot with Dr. Sharma.",
     status: "CONFIRMED",
     priority: "URGENT",
-    language: "en",
+    language: "en-IN",
     smsConfirmation: "[VaniEdge AI] Appointment confirmed for Priya Mehta at 3:30 PM. Ref: TCK-DENT-8821.",
     checksum: "A9E281F0",
     timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
@@ -186,29 +186,29 @@ const DEMO_TICKETS: TicketRecord[] = [
   },
   {
     ticketId: "TCK-HVAC-9104",
-    callerName: "David Miller",
-    callerPhone: "+1 (303) 555-0144",
+    callerName: "Rajesh Kumar",
+    callerPhone: "+91 (998) 018-8776",
     category: "home_services",
     serviceType: "Emergency Water Heater Burst",
     details: "Water leak in basement, caller shut off main valve. Dispatching technician.",
     status: "DISPATCHED",
     priority: "CRITICAL",
-    language: "en",
-    smsConfirmation: "[VaniEdge AI] Emergency request dispatched for David Miller. On-call tech en route.",
+    language: "en-IN",
+    smsConfirmation: "[VaniEdge AI] Emergency request dispatched for Rajesh Kumar. On-call tech en route.",
     checksum: "C401B79E",
     timestamp: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
-    notes: ["Escalated to On-Call Technician: +1 (303) 555-0199"],
+    notes: ["Escalated to On-Call Technician: +91 63612 09256"],
   },
   {
     ticketId: "TCK-LEAD-3012",
-    callerName: "Carlos Ramirez",
-    callerPhone: "+1 (720) 412-8877",
+    callerName: "Amit Verma",
+    callerPhone: "+91 (981) 123-3445",
     category: "home_services",
     serviceType: "Missed Call SMS Rescue Inquiry",
     details: "Caller replied to automated SMS rescue seeking furnace tune-up quote.",
     status: "PENDING",
     priority: "STANDARD",
-    language: "en",
+    language: "en-IN",
     smsConfirmation: "[VaniEdge AI] Thanks for contacting us. A coordinator will call back within 15 mins.",
     checksum: "7F89320A",
     timestamp: new Date(Date.now() - 1000 * 60 * 115).toISOString(),
@@ -395,11 +395,11 @@ export default function BusinessDashboardPage() {
           <div className="flex items-center gap-3">
             {/* Live Line Badge */}
             <a
-              href="tel:+18149613703"
+              href="tel:+918047259000"
               className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono font-medium hover:bg-emerald-500/20 transition-colors"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              +1 (814) 961-3703
+              +91 80 4725 9000
             </a>
 
             <button
@@ -934,7 +934,7 @@ export default function BusinessDashboardPage() {
       <CarrierForwardingModal
         isOpen={forwardingModalOpen}
         onClose={() => setForwardingModalOpen(false)}
-        targetPhone="+18149613703"
+        targetPhone="+918047259000"
       />
     </div>
   );
