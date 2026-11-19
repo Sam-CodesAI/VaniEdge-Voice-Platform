@@ -14,7 +14,7 @@ test("Twilio Webhook Security Test Suite", async (t) => {
   const legitimatePayload = {
     CallSid: "CA1234567890abcdef1234567890abcdef",
     From: "+18005550100",
-    To: "+18149613703",
+    To: "+918047259000",
     Direction: "inbound",
   };
 
@@ -137,7 +137,7 @@ test("Twilio Webhook Security Test Suite", async (t) => {
     const incomingReq = new Request("https://edge.vaniedge.ai/voice/incoming", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "CallSid=CA12345&From=%2B18005550100&To=%2B18149613703",
+      body: "CallSid=CA12345&From=%2B18005550100&To=%2B918047259000",
     });
     const incomingRes = await worker.fetch(incomingReq, dummyEnv, {} as any);
     assert.equal(incomingRes.status, 500, "Worker inbound webhook must fail closed with 500 when TWILIO_AUTH_TOKEN is missing");
@@ -170,7 +170,7 @@ test("Twilio Webhook Security Test Suite", async (t) => {
     const incomingReq = new Request("https://edge.vaniedge.ai/voice/incoming", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "CallSid=CA12345&From=%2B18005550100&To=%2B18149613703",
+      body: "CallSid=CA12345&From=%2B18005550100&To=%2B918047259000",
     });
     const incomingRes = await worker.fetch(incomingReq, configuredEnv, {} as any);
     assert.equal(incomingRes.status, 401, "Worker must reject missing X-Twilio-Signature with 401 Unauthorized");

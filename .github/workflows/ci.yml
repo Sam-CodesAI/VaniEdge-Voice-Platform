@@ -24,7 +24,7 @@ jobs:
       ALLOW_LOCAL_DISK_FALLBACK: "true"
       TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
       TWILIO_AUTH_TOKEN: ci_twilio_auth_token_32chars_long!
-      TWILIO_PHONE_NUMBER: +18149613703
+      TWILIO_PHONE_NUMBER: +918047259000
       SESSION_SECRET: ci_session_secret_at_least_32_characters_long_for_security_12345
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       APP_URL: http://localhost:3000

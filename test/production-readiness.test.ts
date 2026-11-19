@@ -275,7 +275,7 @@ describe("Production Readiness & Security Hardening Test Suite", () => {
             id: `tnt_outage_${Date.now()}`,
             name: "Outage Clinic",
             category: "clinic",
-            twilioPhone: "+18149613703",
+            twilioPhone: "+918047259000",
             twilioSid: "AC_test",
             webhookUrl: "https://test.com",
             monthlyCalls: 0,
@@ -411,7 +411,7 @@ describe("Production Readiness & Security Hardening Test Suite", () => {
       callSid: `CA_test_${Date.now()}`,
       tenantId: "apex-hvac",
       from: "+18005550199",
-      to: "+18149613703",
+      to: "+918047259000",
     });
 
     const tenant = getTenantById("apex-hvac");
