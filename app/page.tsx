@@ -29,6 +29,8 @@ import AuthModal from "@/components/AuthModal";
 import CredentialsModal from "@/components/CredentialsModal";
 import VerticalCustomizerModal from "@/components/VerticalCustomizerModal";
 import CarrierForwardingModal from "@/components/CarrierForwardingModal";
+import CarrierPhone3DSimulator from "@/components/CarrierPhone3DSimulator";
+import LatencyChaosSimulator from "@/components/LatencyChaosSimulator";
 import { UserRecord, UserCredentials } from "@/lib/auth-store";
 
 interface Message {
@@ -96,6 +98,7 @@ export default function VaniEdgePage() {
   const [userDropdownOpen, setUserDropdownOpen] = useState<boolean>(false);
   const [credentialsModalOpen, setCredentialsModalOpen] = useState<boolean>(false);
   const [forwardingModalOpen, setForwardingModalOpen] = useState<boolean>(false);
+  const [activeLabTab, setActiveLabTab] = useState<"phone" | "chaos">("phone");
 
   const handleOpenAuth = (mode: "signin" | "signup" = "signup") => {
     setAuthModalMode(mode);
@@ -606,6 +609,14 @@ export default function VaniEdgePage() {
               </button>
               <button
                 type="button"
+                onClick={() => scrollToSection("carrier-chaos-lab")}
+                className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1 font-bold text-amber-700"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>3D &amp; Chaos Lab</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => scrollToSection("mission-control")}
                 className="hover:text-emerald-700 transition-colors cursor-pointer"
               >
@@ -840,6 +851,14 @@ export default function VaniEdgePage() {
               </button>
               <button
                 type="button"
+                onClick={() => scrollToSection("carrier-chaos-lab")}
+                className="block w-full text-left py-1 text-amber-700 hover:text-amber-900 flex items-center gap-1.5"
+              >
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                3D Carrier &amp; Chaos Lab
+              </button>
+              <button
+                type="button"
                 onClick={() => scrollToSection("mission-control")}
                 className="block w-full text-left py-1 text-black hover:text-emerald-700"
               >
@@ -958,6 +977,64 @@ export default function VaniEdgePage() {
 
           {/* 3. Bento Architecture Grid */}
           <BentoArchitecture />
+
+          {/* 3.5. Interactive 3D Carrier Smartphone & Chaos Latency Lab */}
+          <section id="carrier-chaos-lab" className="py-16 sm:py-20 border-b border-slate-200 bg-white relative scroll-mt-16">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6">
+              <div className="text-center max-w-3xl mx-auto mb-10">
+                <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-slate-100 border border-slate-300 text-black text-xs font-oswald uppercase tracking-wider font-bold mb-3">
+                  <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>3D HARDWARE SIMULATION &amp; CHAOS RESILIENCE</span>
+                </div>
+                <h2 className="text-3xl sm:text-5xl font-bold text-black font-oswald uppercase tracking-tight">
+                  Carrier Forwarding &amp; Chaos Latency Lab
+                </h2>
+                <p className="mt-3 text-sm sm:text-base text-black font-medium">
+                  Test your mobile carrier call forwarding with our real-time 3D smartphone and DTMF synthesis, or inject network latency chaos to observe sub-second failovers across Tier 1 Edge Streaming, Tier 2 Voicemail, and Tier 3 Emergency Triage.
+                </p>
+
+                {/* Tab Switcher */}
+                <div className="mt-6 inline-flex p-1.5 rounded-2xl bg-slate-100 border border-slate-300 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setActiveLabTab("phone")}
+                    className={`px-5 py-2.5 rounded-xl font-oswald uppercase font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 ${
+                      activeLabTab === "phone"
+                        ? "bg-black text-white shadow-md shadow-black/20"
+                        : "text-slate-700 hover:text-black hover:bg-slate-200"
+                    }`}
+                  >
+                    <Phone className="w-4 h-4 text-emerald-400" />
+                    <span>3D Carrier Phone Simulator</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveLabTab("chaos")}
+                    className={`px-5 py-2.5 rounded-xl font-oswald uppercase font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 ${
+                      activeLabTab === "chaos"
+                        ? "bg-black text-white shadow-md shadow-black/20"
+                        : "text-slate-700 hover:text-black hover:bg-slate-200"
+                    }`}
+                  >
+                    <Activity className="w-4 h-4 text-amber-400" />
+                    <span>Latency Chaos &amp; Failover Lab</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic Tab Content */}
+              <div className="transition-all duration-300">
+                {activeLabTab === "phone" ? (
+                  <CarrierPhone3DSimulator targetPhone="+918047259000" />
+                ) : (
+                  <div className="max-w-4xl mx-auto">
+                    <LatencyChaosSimulator />
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
 
           {/* 4. 8 Turnkey Industry Solutions */}
           <IndustrySolutionsSection onSelectCategory={(id) => handleSelectPersona(id)} />

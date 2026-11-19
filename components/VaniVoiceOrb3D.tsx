@@ -1,13 +1,22 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
-import { Mic, Volume2, Phone, Brain, Sparkles } from "lucide-react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { Mic, Volume2, Phone, Brain, Sparkles, Activity } from "lucide-react";
 
 interface VaniVoiceOrb3DProps {
   isSpeaking: boolean;
   isListening: boolean;
   isCalling: boolean;
   isThinking?: boolean;
+}
+
+interface Point3D {
+  x: number;
+  y: number;
+  z: number;
+  baseRadius: number;
+  phi: number;
+  theta: number;
 }
 
 export default function VaniVoiceOrb3D({
@@ -17,218 +26,321 @@ export default function VaniVoiceOrb3D({
   isThinking = false,
 }: VaniVoiceOrb3DProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mouseRef = useRef<{ x: number; y: number; targetX: number; targetY: number }>({
+    x: 0,
+    y: 0,
+    targetX: 0,
+    targetY: 0,
+  });
 
-  // 60FPS Reactive Waveform & Equalizer Visualizer Canvas
+  // Track cursor movement for interactive 3D parallax rotation
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width - 0.5;
+    const ny = (e.clientY - rect.top) / rect.height - 0.5;
+    mouseRef.current.targetX = nx * 0.8;
+    mouseRef.current.targetY = ny * 0.8;
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    mouseRef.current.targetX = 0;
+    mouseRef.current.targetY = 0;
+  }, []);
+
+  // 60FPS 3D Particle Mesh Sphere with Spherical Harmonics
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let animationFrameId: number;
-    let phase = 0;
+    let animId: number;
+    let time = 0;
+
+    // Generate 320 Fibonacci distributed 3D surface points
+    const POINT_COUNT = 320;
+    const points: Point3D[] = [];
+    const goldenRatio = (1 + Math.sqrt(5)) / 2;
+
+    for (let i = 0; i < POINT_COUNT; i++) {
+      const theta = (2 * Math.PI * i) / goldenRatio;
+      const phi = Math.acos(1 - (2 * (i + 0.5)) / POINT_COUNT);
+      const baseR = 72; // Sphere base radius
+
+      const x = baseR * Math.sin(phi) * Math.cos(theta);
+      const y = baseR * Math.cos(phi);
+      const z = baseR * Math.sin(phi) * Math.sin(theta);
+
+      points.push({ x, y, z, baseRadius: baseR, phi, theta });
+    }
+
+    let rotX = 0;
+    let rotY = 0;
 
     const render = () => {
-      phase += 0.05;
+      time += 0.035;
       const width = canvas.width;
       const height = canvas.height;
+      const centerX = width / 2;
+      const centerY = height / 2;
+
       ctx.clearRect(0, 0, width, height);
 
-      // Determine state colors and wave dynamics
-      let primaryColor = "rgba(16, 185, 129, 0.4)"; // emerald
-      let secondaryColor = "rgba(6, 182, 212, 0.3)"; // cyan
-      let waveCount = 3;
-      let amplitude = 6;
-      let frequency = 0.04;
+      // Smooth mouse lerp
+      mouseRef.current.x += (mouseRef.current.targetX - mouseRef.current.x) * 0.08;
+      mouseRef.current.y += (mouseRef.current.targetY - mouseRef.current.y) * 0.08;
+
+      // Base auto rotation + mouse offset
+      rotY += 0.012 + mouseRef.current.x * 0.03;
+      rotX = Math.sin(time * 0.4) * 0.2 + mouseRef.current.y * 0.6;
+
+      const cosY = Math.cos(rotY);
+      const sinY = Math.sin(rotY);
+      const cosX = Math.cos(rotX);
+      const sinX = Math.sin(rotX);
+
+      // Color scheme based on state
+      let r = 16, g = 185, b = 129; // Emerald default
+      let waveMultiplier = 1.0;
+      let waveSpeed = 1.0;
 
       if (isSpeaking) {
-        primaryColor = "rgba(16, 185, 129, 0.85)";
-        secondaryColor = "rgba(52, 211, 153, 0.65)";
-        amplitude = 18;
-        frequency = 0.08;
+        r = 16; g = 185; b = 129; // Vivid Emerald
+        waveMultiplier = 2.8;
+        waveSpeed = 2.4;
       } else if (isListening) {
-        primaryColor = "rgba(6, 182, 212, 0.9)";
-        secondaryColor = "rgba(56, 189, 248, 0.65)";
-        amplitude = 14;
-        frequency = 0.1;
+        r = 6; g = 182; b = 212; // Cyan Photon
+        waveMultiplier = 2.2;
+        waveSpeed = 3.0;
       } else if (isThinking) {
-        primaryColor = "rgba(245, 158, 11, 0.85)";
-        secondaryColor = "rgba(251, 191, 36, 0.6)";
-        amplitude = 9;
-        frequency = 0.14;
+        r = 245; g = 158; b = 11; // Amber Solar
+        waveMultiplier = 1.6;
+        waveSpeed = 4.0;
       } else if (isCalling) {
-        primaryColor = "rgba(99, 102, 241, 0.6)";
-        secondaryColor = "rgba(168, 85, 247, 0.4)";
-        amplitude = 8;
-        frequency = 0.05;
+        r = 99; g = 102; b = 241; // Indigo Telephony
+        waveMultiplier = 1.3;
+        waveSpeed = 1.2;
       }
 
-      // Draw multi-layered harmonic sine waves
-      for (let w = 0; w < waveCount; w++) {
+      // Draw outer ambient ring for "Thinking" state (Orbital Satellite Ring)
+      if (isThinking) {
+        const ringRadius = 88;
+        const orbitAngle = time * 3;
+        ctx.save();
+        ctx.translate(centerX, centerY);
         ctx.beginPath();
-        const currentAmp = amplitude * (1 - w * 0.25);
-        const currentPhase = phase * (1 + w * 0.3) + w * 1.5;
+        for (let a = 0; a < Math.PI * 2; a += 0.2) {
+          const rx = ringRadius * Math.cos(a + orbitAngle);
+          const ry = ringRadius * Math.sin(a + orbitAngle) * 0.35;
+          if (a === 0) ctx.moveTo(rx, ry);
+          else ctx.lineTo(rx, ry);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = `rgba(245, 158, 11, 0.4)`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
 
-        for (let x = 0; x < width; x += 2) {
-          // Attenuate at the borders for smooth pill-style fade
-          const envelope = Math.sin((x / width) * Math.PI);
-          const y =
-            height / 2 +
-            Math.sin(x * frequency + currentPhase) * currentAmp * envelope;
+        // Satellite particle
+        const satX = ringRadius * Math.cos(orbitAngle * 1.5);
+        const satY = ringRadius * Math.sin(orbitAngle * 1.5) * 0.35;
+        ctx.beginPath();
+        ctx.arc(satX, satY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = "#fbbf24";
+        ctx.shadowColor = "#f59e0b";
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.restore();
+      }
 
-          if (x === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
+      // Project, displace, and sort 3D points
+      interface ProjectedPoint {
+        px: number;
+        py: number;
+        pz: number;
+        size: number;
+        alpha: number;
+      }
+
+      const projected: ProjectedPoint[] = [];
+
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+
+        // Acoustic harmonic radial displacement
+        const harmonic =
+          Math.sin(p.phi * 4 + time * waveSpeed) *
+          Math.cos(p.theta * 3 - time * waveSpeed * 0.8) *
+          (6 * waveMultiplier);
+
+        const currentR = p.baseRadius + harmonic;
+
+        // Spherical coordinates with displacement
+        const x0 = currentR * Math.sin(p.phi) * Math.cos(p.theta);
+        const y0 = currentR * Math.cos(p.phi);
+        const z0 = currentR * Math.sin(p.phi) * Math.sin(theta_safe(p.theta));
+
+        // 3D Rotation Y
+        const x1 = x0 * cosY + z0 * sinY;
+        const z1 = -x0 * sinY + z0 * cosY;
+
+        // 3D Rotation X
+        const y2 = y0 * cosX - z1 * sinX;
+        const z2 = y0 * sinX + z1 * cosX;
+
+        // Perspective camera projection (FOV perspective depth)
+        const cameraDistance = 240;
+        const perspective = cameraDistance / (cameraDistance + z2);
+
+        const px = centerX + x1 * perspective;
+        const py = centerY + y2 * perspective;
+
+        // Depth-based sizing & opacity
+        const depthFactor = (z2 + 90) / 180; // 0 (far) to 1 (near)
+        const size = Math.max(0.8, (1.2 + depthFactor * 2.2) * perspective);
+        const alpha = Math.min(1, Math.max(0.12, 0.2 + depthFactor * 0.75));
+
+        projected.push({ px, py, pz: z2, size, alpha });
+      }
+
+      function theta_safe(th: number) {
+        return th;
+      }
+
+      // Sort points back-to-front for proper depth occlusion
+      projected.sort((a, b) => a.pz - b.pz);
+
+      // Render 3D points with subtle core connectors
+      for (let i = 0; i < projected.length; i++) {
+        const pt = projected[i];
+
+        ctx.beginPath();
+        ctx.arc(pt.px, pt.py, pt.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${pt.alpha})`;
+        ctx.fill();
+
+        // Connect nearby points in foreground for a high-tech geometric lattice
+        if (pt.pz > 15 && i % 4 === 0) {
+          const nextPt = projected[Math.min(projected.length - 1, i + 1)];
+          if (nextPt && Math.hypot(pt.px - nextPt.px, pt.py - nextPt.py) < 24) {
+            ctx.beginPath();
+            ctx.moveTo(pt.px, pt.py);
+            ctx.lineTo(nextPt.px, nextPt.py);
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${pt.alpha * 0.35})`;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
           }
         }
-
-        ctx.strokeStyle = w === 0 ? primaryColor : secondaryColor;
-        ctx.lineWidth = w === 0 ? 2.5 : 1.5;
-        ctx.lineCap = "round";
-        ctx.stroke();
       }
 
-      animationFrameId = requestAnimationFrame(render);
+      animId = requestAnimationFrame(render);
     };
 
     render();
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(animId);
     };
   }, [isSpeaking, isListening, isThinking, isCalling]);
 
   return (
-    <div className="relative flex flex-col items-center justify-center w-56 h-56 sm:w-64 sm:h-64 select-none my-1">
+    <div
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className="relative flex flex-col items-center justify-center w-64 h-64 sm:w-72 sm:h-72 select-none my-2 cursor-grab active:cursor-grabbing"
+    >
       {/* Outer ambient breathing aura */}
       <div
-        className={`absolute inset-0 rounded-full blur-3xl transition-all duration-700 pointer-events-none ${
+        className={`absolute inset-4 rounded-full blur-3xl transition-all duration-700 pointer-events-none ${
           isSpeaking
-            ? "bg-emerald-500/35 scale-125 animate-pulse"
+            ? "bg-emerald-500/40 scale-125 animate-pulse"
             : isListening
-            ? "bg-cyan-500/35 scale-125 animate-pulse"
+            ? "bg-cyan-500/40 scale-125 animate-pulse"
             : isThinking
-            ? "bg-amber-500/30 scale-120 animate-pulse"
+            ? "bg-amber-500/35 scale-120 animate-pulse"
             : isCalling
             ? "bg-indigo-500/30 scale-115 animate-pulse"
             : "bg-emerald-500/15 scale-100"
         }`}
       />
 
-      {/* Dynamic Sound Ripple 1 */}
-      <div
-        className={`absolute rounded-full border transition-all duration-700 pointer-events-none ${
-          isSpeaking
-            ? "w-48 h-48 sm:w-56 sm:h-56 border-emerald-400/40 animate-ping opacity-30"
-            : isListening
-            ? "w-48 h-48 sm:w-56 sm:h-56 border-cyan-400/40 animate-ping opacity-30"
-            : isThinking
-            ? "w-44 h-44 sm:w-52 sm:h-52 border-amber-400/40 animate-spin opacity-40 border-dashed"
-            : isCalling
-            ? "w-44 h-44 sm:w-50 sm:h-50 border-indigo-400/30 animate-pulse"
-            : "w-40 h-40 border-slate-800/60"
-        }`}
-        style={{
-          animationDuration:
-            isSpeaking || isListening ? "2.2s" : isThinking ? "6s" : "4s",
-        }}
+      {/* 60FPS 3D WebGL / Particle Canvas */}
+      <canvas
+        ref={canvasRef}
+        width={288}
+        height={288}
+        className="relative z-10 w-full h-full pointer-events-none"
       />
 
-      {/* Dynamic Sound Ripple 2 */}
+      {/* Center Core Badge with Telephony Glyphs */}
       <div
-        className={`absolute w-40 h-40 sm:w-48 sm:h-48 rounded-full border transition-all duration-500 pointer-events-none ${
+        className={`absolute z-20 w-16 h-16 sm:w-18 sm:h-18 rounded-full flex items-center justify-center backdrop-blur-md shadow-2xl transition-all duration-500 border ${
           isSpeaking
-            ? "border-emerald-400/50 scale-105"
+            ? "bg-emerald-950/80 border-emerald-400 text-emerald-300 shadow-emerald-500/40 scale-110"
             : isListening
-            ? "border-cyan-400/50 scale-105"
+            ? "bg-cyan-950/80 border-cyan-400 text-cyan-300 shadow-cyan-500/40 scale-105 animate-pulse"
             : isThinking
-            ? "border-amber-400/50 scale-100 ring-2 ring-amber-500/20"
+            ? "bg-amber-950/80 border-amber-400 text-amber-300 shadow-amber-500/40 scale-105"
             : isCalling
-            ? "border-indigo-400/40 scale-100"
-            : "border-slate-800/80 scale-95"
-        }`}
-      />
-
-      {/* Ambient Inner Ring */}
-      <div
-        className={`absolute w-32 h-32 sm:w-36 sm:h-36 rounded-full border transition-all duration-500 pointer-events-none ${
-          isSpeaking
-            ? "border-emerald-300/60 shadow-lg shadow-emerald-500/30"
-            : isListening
-            ? "border-cyan-300/60 shadow-lg shadow-cyan-500/30"
-            : isThinking
-            ? "border-amber-300/60 shadow-lg shadow-amber-500/30"
-            : "border-slate-700/50"
-        }`}
-      />
-
-      {/* Central Core Sphere */}
-      <div
-        className={`relative z-10 w-24 h-24 sm:w-28 sm:h-28 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500 ${
-          isSpeaking
-            ? "bg-gradient-to-tr from-emerald-600 via-teal-400 to-cyan-300 shadow-emerald-500/50 scale-110"
-            : isListening
-            ? "bg-gradient-to-tr from-cyan-600 via-sky-400 to-indigo-300 shadow-cyan-500/50 scale-105 animate-pulse"
-            : isThinking
-            ? "bg-gradient-to-tr from-amber-600 via-yellow-400 to-orange-400 shadow-amber-500/50 scale-105"
-            : isCalling
-            ? "bg-gradient-to-tr from-indigo-600 via-purple-500 to-pink-400 shadow-indigo-500/40"
-            : "bg-gradient-to-tr from-slate-900 via-slate-800 to-emerald-950/70 border border-slate-700/80 shadow-slate-950/60"
+            ? "bg-indigo-950/80 border-indigo-400 text-indigo-300 shadow-indigo-500/40"
+            : "bg-black/70 border-white/20 text-emerald-400 shadow-black/80"
         }`}
       >
         {isSpeaking ? (
-          <Volume2 className="w-8 h-8 text-black animate-pulse" />
+          <Volume2 className="w-6 h-6 animate-pulse" />
         ) : isListening ? (
-          <Mic className="w-8 h-8 text-black animate-bounce" />
+          <Mic className="w-6 h-6 animate-bounce" />
         ) : isThinking ? (
-          <Brain className="w-8 h-8 text-black animate-pulse" />
+          <Brain className="w-6 h-6 animate-pulse" />
         ) : isCalling ? (
-          <Phone className="w-8 h-8 text-white animate-pulse" />
+          <Phone className="w-6 h-6 animate-pulse" />
         ) : (
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse delay-100" />
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse delay-200" />
-          </div>
+          <Activity className="w-6 h-6 text-emerald-400" />
         )}
       </div>
 
-      {/* 60FPS Reactive Waveform Canvas Visualizer */}
-      <div className="absolute -bottom-2 z-20 w-48 h-10 flex items-center justify-center pointer-events-none">
-        <canvas
-          ref={canvasRef}
-          width={192}
-          height={40}
-          className="w-full h-full opacity-90"
-        />
-      </div>
-
-      {/* State label pill in Oswald & high contrast */}
-      <div className="absolute -bottom-5 z-20">
-        <span
-          className={`text-[10px] font-oswald uppercase tracking-wider font-bold px-3 py-1 rounded-full border shadow-sm transition-all ${
+      {/* Dynamic Telemetry State Capsule */}
+      <div className="absolute -bottom-3 z-30 flex items-center justify-center">
+        <div
+          className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-mono font-semibold tracking-wider uppercase backdrop-blur-md shadow-lg transition-all ${
             isSpeaking
-              ? "bg-emerald-100 text-emerald-950 border-emerald-400"
+              ? "bg-emerald-950/90 text-emerald-300 border-emerald-500/50 shadow-emerald-500/20"
               : isListening
-              ? "bg-cyan-100 text-cyan-950 border-cyan-400"
+              ? "bg-cyan-950/90 text-cyan-300 border-cyan-500/50 shadow-cyan-500/20"
               : isThinking
-              ? "bg-amber-100 text-amber-950 border-amber-400 animate-pulse"
+              ? "bg-amber-950/90 text-amber-300 border-amber-500/50 shadow-amber-500/20 animate-pulse"
               : isCalling
-              ? "bg-indigo-100 text-indigo-950 border-indigo-400"
-              : "bg-white text-black border-slate-300"
+              ? "bg-indigo-950/90 text-indigo-300 border-indigo-500/50 shadow-indigo-500/20"
+              : "bg-black/80 text-gray-300 border-white/10"
           }`}
         >
-          {isSpeaking
-            ? "AI SPEAKING (EDGE AUDIO)"
-            : isListening
-            ? "LISTENING TO CALLER"
-            : isThinking
-            ? "RETRIEVING FROM SUTRADB"
-            : isCalling
-            ? "CARRIER TRUNK CONNECTED"
-            : "READY ON STANDBY"}
-        </span>
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              isSpeaking
+                ? "bg-emerald-400 animate-ping"
+                : isListening
+                ? "bg-cyan-400 animate-ping"
+                : isThinking
+                ? "bg-amber-400 animate-ping"
+                : isCalling
+                ? "bg-indigo-400 animate-ping"
+                : "bg-emerald-400"
+            }`}
+          />
+          <span>
+            {isSpeaking
+              ? "STREAMING VOICE (8kHz μ-law)"
+              : isListening
+              ? "RECEIVING CALLER AUDIO"
+              : isThinking
+              ? "SŪTRADB VECTOR GROUNDING"
+              : isCalling
+              ? "CARRIER TRUNK ACTIVE"
+              : "3D ACOUSTIC ORB STANDBY"}
+          </span>
+        </div>
       </div>
     </div>
   );
