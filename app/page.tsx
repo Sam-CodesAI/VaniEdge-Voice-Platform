@@ -28,6 +28,7 @@ import LandingFooter from "@/components/LandingFooter";
 import AuthModal from "@/components/AuthModal";
 import CredentialsModal from "@/components/CredentialsModal";
 import VerticalCustomizerModal from "@/components/VerticalCustomizerModal";
+import CarrierForwardingModal from "@/components/CarrierForwardingModal";
 import { UserRecord, UserCredentials } from "@/lib/auth-store";
 
 interface Message {
@@ -94,6 +95,7 @@ export default function VaniEdgePage() {
   const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
   const [userDropdownOpen, setUserDropdownOpen] = useState<boolean>(false);
   const [credentialsModalOpen, setCredentialsModalOpen] = useState<boolean>(false);
+  const [forwardingModalOpen, setForwardingModalOpen] = useState<boolean>(false);
 
   const handleOpenAuth = (mode: "signin" | "signup" = "signup") => {
     setAuthModalMode(mode);
@@ -546,12 +548,19 @@ export default function VaniEdgePage() {
             {/* Desktop Navigation Links */}
             <nav className="hidden lg:flex items-center gap-6 text-xs font-bold font-oswald uppercase text-black">
               <a
-                href="/demos/voice-agent"
-                className="text-cyan-700 hover:text-cyan-900 transition-colors cursor-pointer flex items-center gap-1.5 font-bold"
+                href="/dashboard"
+                className="text-emerald-700 hover:text-emerald-900 transition-colors cursor-pointer flex items-center gap-1.5 font-bold"
               >
-                <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse" />
-                Telephony v2.0
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Customer Portal
               </a>
+              <button
+                type="button"
+                onClick={() => setForwardingModalOpen(true)}
+                className="text-blue-700 hover:text-blue-900 transition-colors cursor-pointer flex items-center gap-1 font-bold"
+              >
+                Carrier Forwarding
+              </button>
               <a
                 href="/agency"
                 className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1"
@@ -702,6 +711,13 @@ export default function VaniEdgePage() {
                           </div>
                         </div>
                         <div className="py-1">
+                          <a
+                            href="/dashboard"
+                            className="w-full text-left px-3 py-1.5 text-xs text-emerald-800 font-oswald uppercase font-bold hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                          >
+                            <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Customer Dashboard</span>
+                          </a>
                           <button
                             type="button"
                             onClick={() => {
@@ -1002,6 +1018,13 @@ export default function VaniEdgePage() {
         isOpen={customizerOpen}
         onClose={() => setCustomizerOpen(false)}
         onDeployToStudio={handleDeployCustomizer}
+      />
+
+      {/* Carrier Forwarding Setup Modal */}
+      <CarrierForwardingModal
+        isOpen={forwardingModalOpen}
+        onClose={() => setForwardingModalOpen(false)}
+        targetPhone="+18149613703"
       />
     </div>
   );

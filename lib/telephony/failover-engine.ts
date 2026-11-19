@@ -101,6 +101,21 @@ export function getCallSession(callSid: string): CallSession | undefined {
 }
 
 /**
+ * Lists call sessions with optional tenant and phase filtering.
+ */
+export function listCallSessions(filter?: { tenantId?: string; phase?: string }): CallSession[] {
+  loadSessionsFromDisk();
+  let list = Array.from(ACTIVE_SESSIONS.values());
+  if (filter?.tenantId) {
+    list = list.filter((s) => s.tenantId === filter.tenantId);
+  }
+  if (filter?.phase) {
+    list = list.filter((s) => s.phase === filter.phase);
+  }
+  return list.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
  * Transition a call session to a new phase.
  */
 export function transitionCallPhase(

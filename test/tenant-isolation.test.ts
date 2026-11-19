@@ -4,7 +4,8 @@ import { TenantStore } from "../lib/tenant-store";
 import { authDb } from "../lib/auth-store";
 import { NextRequest } from "next/server";
 import { POST as handlePostQuery, GET as handleGetQuery } from "../app/api/query/route";
-import { POST as handlePostDispatch, GET as handleGetDispatch } from "../app/api/dispatch/route";
+import { POST as handlePostDispatch, GET as handleGetDispatch, PATCH as handlePatchDispatch } from "../app/api/dispatch/route";
+import { GET as handleGetCalls } from "../app/api/voice/calls/route";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -268,5 +269,100 @@ test("Multi-Tenant Isolation & IDOR Protection Test Suite", async (t) => {
     });
     const crossReadRes = await handleGetDispatch(crossReadReq);
     assert.equal(crossReadRes.status, 403, "Cross-tenant ticket read attempt must fail with 403 Forbidden");
+  });
+
+  await t.test("Requirement 11: PATCH /api/dispatch updates status and enforces tenant isolation", async () => {
+    const { user: userA, token: tokenA } = await authDb.register(
+      "User A",
+      `patch_user_a_${Date.now()}@example.com`,
+      "PatchSecurePass123!"
+    );
+    const { user: userB, token: tokenB } = await authDb.register(
+      "User B",
+      `patch_user_b_${Date.now()}@example.com`,
+      "PatchSecurePass123!"
+    );
+
+    // 1. Create ticket under User A
+    const createReq = new NextRequest("http://localhost:3000/api/dispatch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        origin: "http://localhost:3000",
+        cookie: `vaniedge_session=${tokenA}`,
+      },
+      body: JSON.stringify({
+        callerName: "Patch Test Caller",
+        callerPhone: "+18005550299",
+        category: "clinic",
+        serviceType: "Checkup",
+        tenantId: userA.id,
+      }),
+    });
+    const createRes = await handlePostDispatch(createReq);
+    assert.equal(createRes.status, 201);
+    const { ticket } = (await createRes.json()) as { ticket: { ticketId: string; status: string } };
+    assert.equal(ticket.status, "PENDING");
+
+    // 2. User B attempting to mutate User A's ticket must fail with 403
+    const unauthorizedPatch = new NextRequest("http://localhost:3000/api/dispatch", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        origin: "http://localhost:3000",
+        cookie: `vaniedge_session=${tokenB}`,
+      },
+      body: JSON.stringify({
+        ticketId: ticket.ticketId,
+        status: "CONFIRMED",
+        note: "Cross-tenant attack attempt",
+      }),
+    });
+    const unauthRes = await handlePatchDispatch(unauthorizedPatch);
+    assert.equal(unauthRes.status, 403, "Cross-tenant patch must be rejected with 403 Forbidden");
+
+    // 3. User A updating their own ticket succeeds
+    const legitPatch = new NextRequest("http://localhost:3000/api/dispatch", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        origin: "http://localhost:3000",
+        cookie: `vaniedge_session=${tokenA}`,
+      },
+      body: JSON.stringify({
+        ticketId: ticket.ticketId,
+        status: "CONFIRMED",
+        note: "Confirmed by doctor via dashboard",
+      }),
+    });
+    const legitRes = await handlePatchDispatch(legitPatch);
+    assert.equal(legitRes.status, 200, "Legitimate patch must succeed with 200");
+    const legitJson = (await legitRes.json()) as { success: boolean; ticket: { status: string; notes?: string[] } };
+    assert.equal(legitJson.ticket.status, "CONFIRMED");
+    assert.ok(legitJson.ticket.notes?.some((n) => n.includes("Confirmed by doctor via dashboard")));
+  });
+
+  await t.test("Requirement 12: GET /api/voice/calls enforces authentication and tenant isolation", async () => {
+    // 1. Unauthenticated request rejected with 401
+    const unauthReq = new NextRequest("http://localhost:3000/api/voice/calls");
+    const unauthRes = await handleGetCalls(unauthReq);
+    assert.equal(unauthRes.status, 401);
+
+    // 2. Authenticated request succeeds
+    const { user, token } = await authDb.register(
+      "Call User",
+      `calls_user_${Date.now()}@example.com`,
+      "CallSecurePass123!"
+    );
+    const authReq = new NextRequest("http://localhost:3000/api/voice/calls", {
+      headers: {
+        cookie: `vaniedge_session=${token}`,
+      },
+    });
+    const authRes = await handleGetCalls(authReq);
+    assert.equal(authRes.status, 200);
+    const json = (await authRes.json()) as { success: boolean; calls: unknown[] };
+    assert.equal(json.success, true);
+    assert.ok(Array.isArray(json.calls));
   });
 });

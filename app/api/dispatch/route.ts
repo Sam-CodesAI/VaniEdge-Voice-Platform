@@ -21,6 +21,12 @@ const CreateTicketSchema = z.object({
   isSimulated: z.boolean().optional(),
 });
 
+const UpdateTicketSchema = z.object({
+  ticketId: z.string().min(1).max(50),
+  status: z.enum(["PENDING", "CONFIRMED", "DISPATCHED", "ESCALATED", "RESOLVED", "COMPLETED", "CANCELLED"]),
+  note: z.string().max(500).optional(),
+});
+
 export async function GET(req: NextRequest) {
   // 1. Enforce authentication for ticket reads
   const { auth, errorResponse } = await requireAuth(req);
@@ -142,6 +148,62 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Dispatch failed";
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    // 1. Enforce strict authentication & CSRF check
+    const { auth, errorResponse } = await requireAuth(req, { checkCsrf: true });
+    if (errorResponse) {
+      return errorResponse;
+    }
+
+    // 2. Validate input schema
+    const rawBody = (await req.json()) as unknown;
+    const parsed = UpdateTicketSchema.safeParse(rawBody);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.format() },
+        { status: 400 }
+      );
+    }
+
+    const { ticketId, status, note } = parsed.data;
+
+    // 3. Retrieve ticket and verify existence
+    const existing = dispatcher.getTicket(ticketId);
+    if (!existing) {
+      return NextResponse.json({ error: `Ticket not found: ${ticketId}` }, { status: 404 });
+    }
+
+    // 4. Tenant isolation check
+    const userRole = auth!.user.role || "user";
+    if (existing.tenant_id) {
+      const hasAccess = await isTenantOwnedByUser(existing.tenant_id, auth!.user.id, userRole);
+      if (!hasAccess) {
+        return NextResponse.json(
+          { error: "Forbidden: Cannot update tickets for another tenant" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // 5. Update ticket status
+    const updated = await dispatcher.updateTicketStatus(ticketId, status, note);
+    if (!updated) {
+      return NextResponse.json({ error: "Failed to update ticket" }, { status: 500 });
+    }
+
+    const currentTicket = dispatcher.getTicket(ticketId);
+    return NextResponse.json({
+      success: true,
+      ticket: currentTicket,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Ticket update failed";
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
