@@ -14,6 +14,7 @@ import { createInboundGreetingTwiML } from "@/lib/telephony/twiml-builder";
 import { createCallSession, appendTranscript } from "@/lib/telephony/failover-engine";
 import { TwilioVoiceWebhookSchema } from "@/lib/telephony/types";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +23,33 @@ export async function POST(req: NextRequest) {
     // 1. Universal body parsing (urlencoded, multipart, json)
     const bodyParams = await parseTelephonyRequestBody(req);
 
-    // 2. Validate Twilio cryptographic signature strictly
-    const sigCheck = verifyTwilioWebhook(req, bodyParams);
-    if (!sigCheck.valid) {
-      console.warn(`[Voice Incoming] Rejected webhook: ${sigCheck.reason}`);
-      return NextResponse.json(
-        { error: "Unauthorized", reason: sigCheck.reason },
-        { status: sigCheck.statusCode || 401 }
-      );
+    const callSidParam = bodyParams.CallSid || "";
+    const isSimulated = Boolean(
+      bodyParams.isSimulated === "true" ||
+      (bodyParams.isSimulated as unknown) === true ||
+      req.headers.get("x-vaniedge-simulation") === "true" ||
+      req.nextUrl.searchParams.get("isSimulated") === "true" ||
+      callSidParam.startsWith("WEBRTC_") ||
+      callSidParam.startsWith("SIM_") ||
+      callSidParam.startsWith("CA_test_")
+    );
+
+    // 2. Validate Twilio cryptographic signature strictly for PSTN, rate limit simulations
+    if (isSimulated) {
+      const clientIp = getClientIp(req);
+      const rateCheck = checkRateLimit(clientIp, "voice_sim_incoming", 40, 60 * 1000);
+      if (!rateCheck.success) {
+        return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+      }
+    } else {
+      const sigCheck = verifyTwilioWebhook(req, bodyParams);
+      if (!sigCheck.valid) {
+        console.warn(`[Voice Incoming] Rejected webhook: ${sigCheck.reason}`);
+        return NextResponse.json(
+          { error: "Unauthorized", reason: sigCheck.reason },
+          { status: sigCheck.statusCode || 401 }
+        );
+      }
     }
 
     // 3. Validate payload schema
@@ -48,6 +68,7 @@ export async function POST(req: NextRequest) {
       from: callerNumber,
       to: dialedNumber || tenant.phone,
       direction: "inbound",
+      isSimulated,
     });
 
     appendTranscript(
@@ -58,9 +79,10 @@ export async function POST(req: NextRequest) {
 
     // 6. Build absolute URL for process handler
     const origin = req.nextUrl.origin;
+    const simSuffix = isSimulated ? "&isSimulated=true" : "";
     const processActionUrl = `${origin}/api/voice/process?callSid=${encodeURIComponent(
       callSid
-    )}&tenantId=${encodeURIComponent(tenant.id)}`;
+    )}&tenantId=${encodeURIComponent(tenant.id)}${simSuffix}`;
 
     // 7. Generate TwiML response
     return createInboundGreetingTwiML({

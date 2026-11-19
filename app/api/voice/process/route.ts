@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       bodyParams.isSimulated === "true" ||
       (bodyParams.isSimulated as unknown) === true ||
       req.headers.get("x-vaniedge-simulation") === "true" ||
+      req.nextUrl.searchParams.get("isSimulated") === "true" ||
       callSid.startsWith("WEBRTC_") ||
       callSid.startsWith("SIM_") ||
       callSid.startsWith("CA_test_")
@@ -114,16 +115,17 @@ export async function POST(req: NextRequest) {
     appendTranscript(session, "agent", intentResult.replyText);
 
     const origin = req.nextUrl.origin;
+    const simSuffix = isSimulated ? "&isSimulated=true" : "";
 
     // 3. Action Routing: Warm Transfer on Emergency or Live Human Request
     if (intentResult.action === "transfer" || intentResult.emergencyDetected) {
       const whisperUrl = `${origin}/api/voice/whisper?emergency=${encodeURIComponent(
         intentResult.emergencyKeyword || "urgent"
-      )}&tenantId=${encodeURIComponent(tenant.id)}`;
+      )}&tenantId=${encodeURIComponent(tenant.id)}${simSuffix}`;
 
       const fallbackActionUrl = `${origin}/api/voice/transfer-status?callSid=${encodeURIComponent(
         callSid
-      )}&tenantId=${encodeURIComponent(tenant.id)}`;
+      )}&tenantId=${encodeURIComponent(tenant.id)}${simSuffix}`;
 
       const { twimlResponse } = executeTier3WarmTransfer({
         session,
@@ -143,7 +145,7 @@ export async function POST(req: NextRequest) {
     // Follow-up gather if inquiry continues
     const nextActionUrl = `${origin}/api/voice/process?callSid=${encodeURIComponent(
       callSid
-    )}&tenantId=${encodeURIComponent(tenant.id)}`;
+    )}&tenantId=${encodeURIComponent(tenant.id)}${simSuffix}`;
 
     builder.gather({
       action: nextActionUrl,
@@ -173,7 +175,7 @@ export async function POST(req: NextRequest) {
     if (session) {
       const recordingActionUrl = `${req.nextUrl.origin}/api/voice/recording?callSid=${encodeURIComponent(
         callSid
-      )}&tenantId=${encodeURIComponent(tenant.id)}`;
+      )}&tenantId=${encodeURIComponent(tenant.id)}${session.isSimulated ? "&isSimulated=true" : ""}`;
 
       const { twimlResponse } = executeTier2Fallback({
         session,

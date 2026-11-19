@@ -20,6 +20,7 @@ import { sendGmailMessage } from "@/lib/email/gmail";
 import { sendTelegramAdminAlert } from "@/lib/telegram-alert";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
 import { verifyTwilioWebhook } from "@/lib/telephony/security";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +37,30 @@ export async function POST(req: NextRequest) {
   try {
     const bodyParams = await parseTelephonyRequestBody(req);
 
-    const sigCheck = verifyTwilioWebhook(req, bodyParams);
-    if (!sigCheck.valid) {
-      console.warn(`[Voice Recording] Rejected webhook: ${sigCheck.reason}`);
-      return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+    const callSidParam = bodyParams.CallSid || callSid || "";
+    const isSimulated = Boolean(
+      bodyParams.isSimulated === "true" ||
+      (bodyParams.isSimulated as unknown) === true ||
+      req.headers.get("x-vaniedge-simulation") === "true" ||
+      req.nextUrl.searchParams.get("isSimulated") === "true" ||
+      session?.isSimulated ||
+      callSidParam.startsWith("WEBRTC_") ||
+      callSidParam.startsWith("SIM_") ||
+      callSidParam.startsWith("CA_test_")
+    );
+
+    if (isSimulated) {
+      const clientIp = getClientIp(req);
+      const rateCheck = checkRateLimit(clientIp, "voice_sim_recording", 40, 60 * 1000);
+      if (!rateCheck.success) {
+        return new Response("Too Many Requests", { status: 429 });
+      }
+    } else {
+      const sigCheck = verifyTwilioWebhook(req, bodyParams);
+      if (!sigCheck.valid) {
+        console.warn(`[Voice Recording] Rejected webhook: ${sigCheck.reason}`);
+        return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+      }
     }
 
     recordingUrl = bodyParams.RecordingUrl || "";

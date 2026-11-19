@@ -10,14 +10,28 @@ import { NextRequest } from "next/server";
 import { getTenantById } from "@/lib/telephony/tenant-store";
 import { TwiMLBuilder } from "@/lib/telephony/twiml-builder";
 import { verifyTwilioWebhook } from "@/lib/telephony/security";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const sigCheck = verifyTwilioWebhook(req, {});
-  if (!sigCheck.valid) {
-    console.warn(`[Voice Whisper] Rejected unauthorized webhook: ${sigCheck.reason}`);
-    return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+  const isSimulated = Boolean(
+    req.headers.get("x-vaniedge-simulation") === "true" ||
+    req.nextUrl.searchParams.get("isSimulated") === "true"
+  );
+
+  if (isSimulated) {
+    const clientIp = getClientIp(req);
+    const rateCheck = checkRateLimit(clientIp, "voice_sim_whisper", 40, 60 * 1000);
+    if (!rateCheck.success) {
+      return new Response("Too Many Requests", { status: 429 });
+    }
+  } else {
+    const sigCheck = verifyTwilioWebhook(req, {});
+    if (!sigCheck.valid) {
+      console.warn(`[Voice Whisper] Rejected unauthorized webhook: ${sigCheck.reason}`);
+      return new Response("Unauthorized", { status: sigCheck.statusCode || 401 });
+    }
   }
 
   const emergency = req.nextUrl.searchParams.get("emergency") || "emergency repair";
