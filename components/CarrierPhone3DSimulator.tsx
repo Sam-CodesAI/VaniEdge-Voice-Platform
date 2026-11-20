@@ -113,10 +113,46 @@ export default function CarrierPhone3DSimulator({
   const [dialedInput, setDialedInput] = useState<string>("");
   const [callState, setCallState] = useState<"idle" | "dialing" | "forwarded" | "cancelled">("idle");
   const [copied, setCopied] = useState<boolean>(false);
+  const [callbackPhone, setCallbackPhone] = useState<string>("+916361209256");
+  const [isTriggeringCall, setIsTriggeringCall] = useState<boolean>(false);
+  const [callbackResult, setCallbackResult] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const cleanTarget = targetPhone.replace(/\D/g, "");
   const fullDialString = `${selectedCarrier.forwardCode}${cleanTarget}#`;
+
+  const handleRequestCallback = async () => {
+    if (!callbackPhone.trim() || isTriggeringCall) return;
+    setIsTriggeringCall(true);
+    setCallbackResult(null);
+
+    try {
+      const res = await fetch("/api/voice/outbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: callbackPhone.trim() }),
+      });
+      const data = (await res.json()) as { success?: boolean; message?: string; error?: string };
+      if (res.ok && data.success) {
+        setCallbackResult({
+          success: true,
+          message: data.message || `Calling ${callbackPhone}... Answer your phone!`,
+        });
+      } else {
+        setCallbackResult({
+          success: false,
+          error: data.error || "Failed to trigger outbound call.",
+        });
+      }
+    } catch {
+      setCallbackResult({
+        success: false,
+        error: "Network error connecting to callback service.",
+      });
+    } finally {
+      setIsTriggeringCall(false);
+    }
+  };
 
   // Play realistic DTMF phone tone
   const playTone = (digit: string) => {
@@ -312,6 +348,65 @@ export default function CarrierPhone3DSimulator({
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset Dialpad</span>
             </button>
+          </div>
+
+          {/* Instant Callback Section (Zero ISD Pack Required) */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-cyan-950/30 to-black border border-emerald-500/30 space-y-3 mt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5 font-oswald uppercase tracking-wide">
+                <PhoneCall className="w-4 h-4 text-emerald-400" />
+                <span>Test Live AI Call On Your Indian Phone</span>
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                100% FREE INCOMING
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-300 leading-relaxed">
+              No ISD pack required. In India, all incoming calls are free. Enter your verified Indian mobile number and the AI will call you directly!
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <input
+                type="tel"
+                value={callbackPhone}
+                onChange={(e) => setCallbackPhone(e.target.value)}
+                placeholder="+916361209256"
+                className="w-full sm:flex-1 px-3 py-2 rounded-lg bg-black/80 border border-white/20 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={handleRequestCallback}
+                disabled={isTriggeringCall}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-oswald uppercase text-xs transition-all shadow-md shadow-emerald-600/30 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isTriggeringCall ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Dialing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Call My Phone Now</span>
+                  </>
+                )}
+              </button>
+            </div>
+            {callbackResult && (
+              <div
+                className={`p-2.5 rounded-lg text-xs font-mono flex items-center gap-2 ${
+                  callbackResult.success
+                    ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+                    : "bg-rose-500/10 border border-rose-500/30 text-rose-300"
+                }`}
+              >
+                {callbackResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <PhoneOff className="w-4 h-4 text-rose-400 shrink-0" />
+                )}
+                <span>{callbackResult.message || callbackResult.error}</span>
+              </div>
+            )}
           </div>
         </div>
 
