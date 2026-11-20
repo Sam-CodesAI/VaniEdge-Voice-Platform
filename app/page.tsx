@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import {
   Phone,
   Globe2,
@@ -549,78 +550,55 @@ export default function VaniEdgePage() {
             </a>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-6 text-xs font-bold font-oswald uppercase text-black">
-              <a
-                href="/dashboard"
-                className="text-emerald-700 hover:text-emerald-900 transition-colors cursor-pointer flex items-center gap-1.5 font-bold"
+            <nav className="hidden lg:flex items-center gap-4 text-xs font-bold font-oswald uppercase text-black">
+              <Link
+                href="/receptionist"
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5 font-bold shadow-sm"
               >
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Customer Portal
-              </a>
+                <span>Receptionist App</span>
+              </Link>
+              <Link
+                href="/platform"
+                className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-800 hover:bg-blue-500/20 transition-all flex items-center gap-1.5 font-bold shadow-sm"
+              >
+                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                <span>Platform Console</span>
+              </Link>
+              <Link
+                href="/dashboard"
+                className="text-gray-700 hover:text-black transition-colors cursor-pointer flex items-center gap-1"
+              >
+                Inbound Logs
+              </Link>
               <button
                 type="button"
                 onClick={() => setForwardingModalOpen(true)}
-                className="text-blue-700 hover:text-blue-900 transition-colors cursor-pointer flex items-center gap-1 font-bold"
+                className="text-gray-700 hover:text-black transition-colors cursor-pointer flex items-center gap-1"
               >
                 Carrier Forwarding
-              </button>
-              <a
-                href="/agency"
-                className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1"
-              >
-                Agency Portal
-              </a>
-              <button
-                type="button"
-                onClick={() => scrollToSection("overview")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer"
-              >
-                Overview
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("studio")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1.5"
+                className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1 text-black font-bold"
               >
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 Live Studio
               </button>
               <button
                 type="button"
-                onClick={() => scrollToSection("cinematic-scrollytelling")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <span className="h-2 w-2 rounded-full bg-cyan-500 animate-ping" />
-                180ms Flight
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollToSection("industries")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer"
-              >
-                8 Industries
-              </button>
-              <button
-                type="button"
                 onClick={() => scrollToSection("architecture")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer"
+                className="hover:text-emerald-700 transition-colors cursor-pointer text-gray-700"
               >
                 Architecture
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("carrier-chaos-lab")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1 font-bold text-amber-700"
+                className="hover:text-amber-800 transition-colors cursor-pointer flex items-center gap-1 font-bold text-amber-700"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                <span>3D &amp; Chaos Lab</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollToSection("mission-control")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer"
-              >
-                Audited Call &amp; Watchdog
+                <span>Chaos Lab</span>
               </button>
               <button
                 type="button"
@@ -813,13 +791,24 @@ export default function VaniEdgePage() {
           {/* Mobile Dropdown Menu */}
           {mobileMenuOpen && (
             <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-3 font-bold font-oswald uppercase text-sm text-black">
-              <button
-                type="button"
-                onClick={() => scrollToSection("overview")}
+              <Link
+                href="/receptionist"
+                className="block w-full text-left py-2 px-3 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200"
+              >
+                📞 VaniEdge Receptionist (For Businesses)
+              </Link>
+              <Link
+                href="/platform"
+                className="block w-full text-left py-2 px-3 rounded-lg bg-blue-50 text-blue-800 font-bold border border-blue-200"
+              >
+                ⚡ VaniEdge Platform (For Developers &amp; Agencies)
+              </Link>
+              <Link
+                href="/dashboard"
                 className="block w-full text-left py-1 text-black hover:text-emerald-700"
               >
-                Overview
-              </button>
+                Inbound Call Logs &amp; Transcripts
+              </Link>
               <button
                 type="button"
                 onClick={() => scrollToSection("studio")}
