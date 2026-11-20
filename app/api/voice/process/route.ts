@@ -23,6 +23,7 @@ import { TwiMLBuilder } from "@/lib/telephony/twiml-builder";
 import { TwilioVoiceWebhookSchema } from "@/lib/telephony/types";
 import { parseTelephonyRequestBody } from "@/lib/telephony/request-parser";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { sendTelegramAdminAlert } from "@/lib/telegram-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +114,17 @@ export async function POST(req: NextRequest) {
     session.latencyMs.total = elapsed;
     session.intent = intentResult.intent;
     appendTranscript(session, "agent", intentResult.replyText);
+
+    // Dispatch real-time Telegram alert to admin
+    if (!isSimulated) {
+      sendTelegramAdminAlert({
+        type: intentResult.emergencyDetected ? "EMERGENCY_DISPATCH" : "LEAD_CUSTOMIZER",
+        businessName: tenant.name,
+        callerName: session.from,
+        contact: session.from,
+        details: `Caller said: "${userInput}"\nAI replied: "${intentResult.replyText}"\nIntent: ${intentResult.intent || "general_inquiry"}`,
+      }).catch((err) => console.warn("[Telegram Alert Error]:", err));
+    }
 
     const origin = req.nextUrl.origin;
     const simSuffix = isSimulated ? "&isSimulated=true" : "";

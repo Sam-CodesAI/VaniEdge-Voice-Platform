@@ -42,6 +42,14 @@ export default function LandingHero({
           </span>
         </h1>
 
+        {/* Core Vision: Listen, Understand, Respond Naturally, Perform Actions */}
+        <p className="mt-6 text-base sm:text-xl lg:text-2xl text-slate-200 max-w-3xl mx-auto font-medium leading-relaxed font-sans">
+          AI systems that <span className="text-emerald-400 font-bold">listen</span>,{" "}
+          <span className="text-teal-300 font-bold">understand</span>,{" "}
+          <span className="text-cyan-400 font-bold">respond naturally</span>, and{" "}
+          <span className="text-white font-bold underline decoration-emerald-500/70 decoration-2">perform real-world actions</span> through spoken conversations.
+        </p>
+
         {/* Vedic Etymology & Philosophy Badge */}
         <div className="mt-8 inline-flex items-center gap-3 px-5 py-2.5 rounded-xl bg-white/[0.02] border border-white/5 text-xs text-gray-400 font-mono shadow-sm backdrop-blur-md">
           <span className="text-emerald-400 font-bold font-oswald text-sm tracking-wide">वाणी (Vāṇī)</span>
