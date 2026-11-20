@@ -2,29 +2,29 @@
 
 @layer base {
   :root {
-    --background: #ffffff;
-    --foreground: #000000;
+    --background: #07070a;
+    --foreground: #ffffff;
   }
 
   * {
-    border-color: rgba(0, 0, 0, 0.12);
+    border-color: rgba(255, 255, 255, 0.1);
   }
 
   html {
-    color-scheme: light;
-    background-color: #ffffff;
-    color: #000000;
-    font-family: "Matt", "Manrope", "Montserrat", "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
+    background-color: #07070a;
+    color: #ffffff;
+    font-family: "Manrope", "Montserrat", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-text-size-adjust: 100%;
   }
 
   body {
-    background-color: #ffffff;
-    color: #000000;
+    background-color: #07070a;
+    color: #ffffff;
     min-height: 100vh;
     overflow-x: hidden;
-    font-family: "Matt", "Manrope", "Montserrat", "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "Manrope", "Montserrat", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: -0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -32,13 +32,8 @@
 
   /* All titles and headings prominently use Oswald */
   h1, h2, h3, h4, h5, h6, .font-oswald, .font-heading {
-    font-family: "Oswald", "Matt", "Montserrat", sans-serif !important;
+    font-family: "Oswald", "Montserrat", sans-serif !important;
     letter-spacing: 0.015em;
-    color: #000000;
-  }
-
-  p, span, label, div {
-    font-family: "Matt", "Manrope", "Montserrat", "Plus Jakarta Sans", system-ui, sans-serif;
   }
 
   code, pre, kbd, samp, .font-mono {
@@ -47,11 +42,7 @@
 }
 
 .font-oswald {
-  font-family: "Oswald", "Matt", "Montserrat", sans-serif !important;
-}
-
-.font-matt {
-  font-family: "Matt", "Manrope", "Montserrat", "Plus Jakarta Sans", system-ui, sans-serif !important;
+  font-family: "Oswald", "Montserrat", sans-serif !important;
 }
 
 /* Custom scrollbars */
@@ -60,12 +51,12 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #07070a;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(255, 255, 255, 0.3);
 }
