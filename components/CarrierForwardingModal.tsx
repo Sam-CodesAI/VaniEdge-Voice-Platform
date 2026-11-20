@@ -94,7 +94,7 @@ const CARRIERS: CarrierGuide[] = [
 export default function CarrierForwardingModal({
   isOpen,
   onClose,
-  targetPhone = "+918047259000",
+  targetPhone = "+18149613703",
 }: CarrierForwardingModalProps) {
   const [selectedCarrierIndex, setSelectedCarrierIndex] = useState<number>(0);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);

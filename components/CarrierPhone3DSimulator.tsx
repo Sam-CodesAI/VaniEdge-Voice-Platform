@@ -107,7 +107,7 @@ const DTMF_TONES: Record<string, [number, number]> = {
 };
 
 export default function CarrierPhone3DSimulator({
-  targetPhone = "+918047259000",
+  targetPhone = "+18149613703",
 }: CarrierPhone3DSimulatorProps) {
   const [selectedCarrier, setSelectedCarrier] = useState<CarrierPreset>(CARRIERS[0]);
   const [dialedInput, setDialedInput] = useState<string>("");
@@ -352,7 +352,7 @@ export default function CarrierPhone3DSimulator({
                     Call Forwarding Enabled
                   </h4>
                   <p className="text-[11px] font-mono text-emerald-300">
-                    Routing to +91 80 4725 9000
+                    Routing to {targetPhone}
                   </p>
                   <p className="text-[10px] text-gray-400 pt-1">
                     Your AI voice receptionist is now active for unanswered calls.
@@ -386,7 +386,7 @@ export default function CarrierPhone3DSimulator({
                     </span>
                   </div>
                   <p className="text-[10px] font-mono text-emerald-400 mt-1">
-                    VaniEdge AI DID: +91 80 4725 9000
+                    VaniEdge AI DID: {targetPhone}
                   </p>
                 </div>
               )}

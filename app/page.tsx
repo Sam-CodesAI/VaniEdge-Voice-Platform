@@ -1026,7 +1026,7 @@ export default function VaniEdgePage() {
               {/* Dynamic Tab Content */}
               <div className="transition-all duration-300">
                 {activeLabTab === "phone" ? (
-                  <CarrierPhone3DSimulator targetPhone="+918047259000" />
+                  <CarrierPhone3DSimulator targetPhone="+18149613703" />
                 ) : (
                   <div className="max-w-4xl mx-auto">
                     <LatencyChaosSimulator />
@@ -1101,7 +1101,7 @@ export default function VaniEdgePage() {
       <CarrierForwardingModal
         isOpen={forwardingModalOpen}
         onClose={() => setForwardingModalOpen(false)}
-        targetPhone="+918047259000"
+        targetPhone="+18149613703"
       />
     </div>
   );
