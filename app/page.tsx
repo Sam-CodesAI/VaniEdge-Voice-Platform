@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
   Phone,
+  PhoneCall,
   Globe2,
   ExternalLink,
   Code2,
@@ -16,11 +17,11 @@ import {
   LogOut,
   User as UserIcon,
   Key,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import VaniStudioView, { BusinessCategory, AVAILABLE_CATEGORIES } from "@/components/VaniStudioView";
-import { TelephonyMissionControl } from "@/components/TelephonyMissionControl";
 import LandingHero from "@/components/LandingHero";
-import CinematicVoiceScrollytelling from "@/components/CinematicVoiceScrollytelling";
 import BentoArchitecture from "@/components/BentoArchitecture";
 import IndustrySolutionsSection from "@/components/IndustrySolutionsSection";
 import PricingSection from "@/components/PricingSection";
@@ -100,6 +101,51 @@ export default function VaniEdgePage() {
   const [credentialsModalOpen, setCredentialsModalOpen] = useState<boolean>(false);
   const [forwardingModalOpen, setForwardingModalOpen] = useState<boolean>(false);
   const [activeLabTab, setActiveLabTab] = useState<"phone" | "chaos">("phone");
+  const [directPhoneInput, setDirectPhoneInput] = useState<string>("+91 63612 09256");
+  const [isDirectCalling, setIsDirectCalling] = useState<boolean>(false);
+  const [directCallStatus, setDirectCallStatus] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+
+  const handleDispatchDirectCall = async () => {
+    if (!directPhoneInput.trim()) return;
+    setIsDirectCalling(true);
+    setDirectCallStatus({ type: "info", message: "Connecting to PSTN gateway..." });
+
+    try {
+      const res = await fetch("/api/voice/outbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: directPhoneInput.trim(),
+          callerName: businessName,
+          category: selectedPersona,
+          voice: selectedVoice,
+        }),
+      });
+
+      const data = (await res.json()) as { success?: boolean; callSid?: string; error?: string };
+      if (res.ok && data.success) {
+        setDirectCallStatus({
+          type: "success",
+          message: `Ringing your phone! CallSid: ${data.callSid || "CA_live_test"}`,
+        });
+      } else {
+        setDirectCallStatus({
+          type: "error",
+          message: data.error || "Unable to dispatch call. Verify format (+91...).",
+        });
+      }
+    } catch {
+      setDirectCallStatus({
+        type: "error",
+        message: "Network error connecting to telephony gateway.",
+      });
+    } finally {
+      setIsDirectCalling(false);
+    }
+  };
 
   const handleOpenAuth = (mode: "signin" | "signup" = "signup") => {
     setAuthModalMode(mode);
@@ -177,6 +223,7 @@ export default function VaniEdgePage() {
   // Load browser voices, restore auth session & setup Web Speech Recognition on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
       try {
         const storedUser = localStorage.getItem("vaniedge_auth_user");
         if (storedUser) {
@@ -509,14 +556,14 @@ export default function VaniEdgePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-black selection:bg-emerald-400 selection:text-black scroll-smooth">
+    <div className="min-h-screen bg-[#07070a] text-white selection:bg-emerald-500/30 selection:text-white font-sans scroll-smooth">
       {/* Hidden Audio Player for ElevenLabs Streaming */}
       <audio ref={audioPlayerRef} className="hidden" />
 
       {/* Main Content Area */}
       <div className="flex flex-col min-h-screen w-full">
         {/* Top Sticky Navigation Bar */}
-        <header className="border-b border-slate-200 bg-white/95 sticky top-0 z-50 shadow-sm backdrop-blur-md">
+        <header className="border-b border-white/10 bg-[#07070a]/90 sticky top-0 z-50 backdrop-blur-md">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
             {/* Left Brand */}
             <a
@@ -536,90 +583,90 @@ export default function VaniEdgePage() {
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-xl tracking-tight text-black font-oswald uppercase">
+                  <span className="font-bold text-xl tracking-tight text-white font-oswald uppercase">
                     VaniEdge
                   </span>
-                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-slate-100 text-black border border-slate-300 font-bold tracking-wider font-oswald">
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold tracking-wider font-oswald">
                     VOICE PLATFORM
                   </span>
                 </div>
-                <span className="text-[11px] text-black font-mono font-semibold -mt-0.5 hidden sm:block">
+                <span className="text-[11px] text-gray-400 font-mono font-semibold -mt-0.5 hidden sm:block">
                   Sub-Second Telephony &amp; SutraDB RAG
                 </span>
               </div>
             </a>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-4 text-xs font-bold font-oswald uppercase text-black">
+            <nav className="hidden lg:flex items-center gap-3 text-xs font-bold font-oswald uppercase text-gray-300">
               <Link
                 href="/receptionist"
-                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5 font-bold shadow-sm"
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5 font-bold shadow-sm"
               >
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Receptionist App</span>
               </Link>
               <Link
                 href="/platform"
-                className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-800 hover:bg-blue-500/20 transition-all flex items-center gap-1.5 font-bold shadow-sm"
+                className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-all flex items-center gap-1.5 font-bold shadow-sm"
               >
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
                 <span>Platform Console</span>
               </Link>
               <Link
                 href="/dashboard"
-                className="text-gray-700 hover:text-black transition-colors cursor-pointer flex items-center gap-1"
+                className="text-gray-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
               >
                 Inbound Logs
               </Link>
               <button
                 type="button"
                 onClick={() => setForwardingModalOpen(true)}
-                className="text-gray-700 hover:text-black transition-colors cursor-pointer flex items-center gap-1"
+                className="text-gray-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
               >
                 Carrier Forwarding
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("studio")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1 text-black font-bold"
+                className="hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1 text-gray-300 font-bold"
               >
                 Live Studio
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("architecture")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer text-gray-700"
+                className="hover:text-emerald-400 transition-colors cursor-pointer text-gray-300"
               >
                 Architecture
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("carrier-chaos-lab")}
-                className="hover:text-amber-800 transition-colors cursor-pointer flex items-center gap-1 font-bold text-amber-700"
+                className="hover:text-amber-300 transition-colors cursor-pointer flex items-center gap-1 font-bold text-amber-400"
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
                 <span>Chaos Lab</span>
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("pricing")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer"
+                className="hover:text-emerald-400 transition-colors cursor-pointer text-gray-300"
               >
                 Pricing
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("faq")}
-                className="hover:text-emerald-700 transition-colors cursor-pointer"
+                className="hover:text-emerald-400 transition-colors cursor-pointer text-gray-300"
               >
                 FAQ
               </button>
               <button
                 type="button"
                 onClick={() => setCustomizerOpen(true)}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-black hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-1 font-bold font-oswald"
+                className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white hover:bg-white/10 transition-all cursor-pointer flex items-center gap-1 font-bold font-oswald"
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Customize in 60s</span>
               </button>
             </nav>
@@ -627,8 +674,8 @@ export default function VaniEdgePage() {
             {/* Right Quick Actions */}
             <div className="flex items-center gap-2 sm:gap-3">
               {/* Spoken Language Selector */}
-              <div className="flex items-center gap-1.5 bg-white border border-slate-300 px-2.5 py-1.5 rounded-lg text-xs shadow-sm">
-                <Globe2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <div className="flex items-center gap-1.5 bg-[#0d0d14] border border-white/10 px-2.5 py-1.5 rounded-lg text-xs shadow-sm">
+                <Globe2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <select
                   value={selectedLanguage}
                   onChange={(e) => {
@@ -650,11 +697,11 @@ export default function VaniEdgePage() {
                       speakVoiceResponse(switchAudio[newLang] || `Language set to ${langMeta?.label || newLang}.`);
                     }
                   }}
-                  className="bg-transparent text-black text-xs font-bold focus:outline-none cursor-pointer pr-1"
+                  className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer pr-1"
                   aria-label="Select Spoken Language"
                 >
                   {LANGUAGES.map((l) => (
-                    <option key={l.code} value={l.code} className="bg-white text-black font-semibold">
+                    <option key={l.code} value={l.code} className="bg-[#0f0f18] text-white font-semibold">
                       {l.label} ({l.nativeLabel})
                     </option>
                   ))}
@@ -668,7 +715,7 @@ export default function VaniEdgePage() {
                   <button
                     type="button"
                     onClick={() => setCredentialsModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold font-oswald uppercase text-xs shadow-sm transition-all cursor-pointer active:scale-95"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-oswald uppercase text-xs shadow-sm transition-all cursor-pointer active:scale-95"
                     title="View API Keys & SIP Credentials"
                   >
                     <Key className="w-3.5 h-3.5" />
@@ -679,43 +726,43 @@ export default function VaniEdgePage() {
                     <button
                       type="button"
                       onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                      className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:border-black text-xs text-black font-bold transition-all cursor-pointer shadow-sm"
+                      className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#0d0d14] border border-white/10 hover:border-white/30 text-xs text-white font-bold transition-all cursor-pointer shadow-sm"
                     >
-                      <div className="h-6 w-6 rounded-full bg-black text-white font-bold flex items-center justify-center text-[11px] font-oswald">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500 text-black font-bold flex items-center justify-center text-[11px] font-oswald">
                         {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
                       </div>
                       <span className="hidden sm:inline font-bold">{currentUser.name}</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-black font-mono font-bold hidden md:inline border border-slate-200">
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-emerald-400 font-mono font-bold hidden md:inline border border-white/10">
                         {currentUser.tier}
                       </span>
                     </button>
 
                     {userDropdownOpen && (
-                      <div className="absolute right-0 mt-2 w-64 rounded-xl bg-white border-2 border-slate-200 p-2 shadow-2xl z-50 animate-in fade-in text-black">
-                        <div className="px-3 py-2 border-b border-slate-200">
-                          <div className="text-xs font-bold text-black font-oswald uppercase truncate">{currentUser.name}</div>
-                          <div className="text-[11px] text-slate-600 font-mono truncate">{currentUser.email}</div>
-                          <div className="text-[10px] text-emerald-700 font-mono font-bold mt-0.5 truncate">
+                      <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0f0f18] border border-white/10 p-2 shadow-2xl z-50 animate-in fade-in text-white">
+                        <div className="px-3 py-2 border-b border-white/10">
+                          <div className="text-xs font-bold text-white font-oswald uppercase truncate">{currentUser.name}</div>
+                          <div className="text-[11px] text-gray-400 font-mono truncate">{currentUser.email}</div>
+                          <div className="text-[10px] text-emerald-400 font-mono font-bold mt-0.5 truncate">
                             DID: {currentUser.credentials.assignedPhoneNumber}
                           </div>
                         </div>
                         <div className="py-1">
-                          <a
+                          <Link
                             href="/dashboard"
-                            className="w-full text-left px-3 py-1.5 text-xs text-emerald-800 font-oswald uppercase font-bold hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                            className="w-full text-left px-3 py-1.5 text-xs text-emerald-400 font-oswald uppercase font-bold hover:bg-white/5 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                           >
-                            <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                            <Activity className="w-3.5 h-3.5 text-emerald-400" />
                             <span>Customer Dashboard</span>
-                          </a>
+                          </Link>
                           <button
                             type="button"
                             onClick={() => {
                               setUserDropdownOpen(false);
                               setCredentialsModalOpen(true);
                             }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-black font-oswald uppercase font-bold hover:bg-emerald-50 hover:text-emerald-800 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-300 font-oswald uppercase font-bold hover:bg-white/5 hover:text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                           >
-                            <Key className="w-3.5 h-3.5 text-emerald-600" />
+                            <Key className="w-3.5 h-3.5 text-emerald-400" />
                             <span>API Keys &amp; SIP Trunks</span>
                           </button>
                           <button
@@ -724,28 +771,17 @@ export default function VaniEdgePage() {
                               setUserDropdownOpen(false);
                               scrollToSection("studio");
                             }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-black font-oswald uppercase font-bold hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-300 font-oswald uppercase font-bold hover:bg-white/5 hover:text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                           >
-                            <Bot className="w-3.5 h-3.5 text-emerald-600" />
+                            <Bot className="w-3.5 h-3.5 text-emerald-400" />
                             <span>Interactive Studio</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUserDropdownOpen(false);
-                              scrollToSection("mission-control");
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-black font-oswald uppercase font-bold hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                          >
-                            <Activity className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Carrier Health &amp; Watchdog</span>
-                          </button>
                         </div>
-                        <div className="pt-1 border-t border-slate-200">
+                        <div className="pt-1 border-t border-white/10">
                           <button
                             type="button"
                             onClick={handleSignOut}
-                            className="w-full text-left px-3 py-1.5 text-xs text-rose-600 font-oswald uppercase font-bold hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                            className="w-full text-left px-3 py-1.5 text-xs text-rose-400 font-oswald uppercase font-bold hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                           >
                             <LogOut className="w-3.5 h-3.5" />
                             <span>Sign Out</span>
@@ -760,7 +796,7 @@ export default function VaniEdgePage() {
                   <button
                     type="button"
                     onClick={() => handleOpenAuth("signin")}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold font-oswald uppercase text-black hover:bg-slate-100 transition-colors cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold font-oswald uppercase text-gray-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
                   >
                     Sign In
                   </button>
@@ -768,9 +804,9 @@ export default function VaniEdgePage() {
                   <button
                     type="button"
                     onClick={() => handleOpenAuth("signup")}
-                    className="px-3.5 py-1.5 rounded-lg bg-black hover:bg-slate-800 text-white font-bold font-oswald uppercase text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold font-oswald uppercase text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-slate-950" />
                     <span>Get Started Free</span>
                   </button>
                 </div>
@@ -780,7 +816,7 @@ export default function VaniEdgePage() {
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-1.5 rounded-lg bg-white border border-slate-300 text-black lg:hidden cursor-pointer"
+                className="p-1.5 rounded-lg bg-[#0d0d14] border border-white/10 text-white lg:hidden cursor-pointer"
                 aria-label="Toggle Mobile Menu"
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -790,84 +826,69 @@ export default function VaniEdgePage() {
 
           {/* Mobile Dropdown Menu */}
           {mobileMenuOpen && (
-            <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-3 font-bold font-oswald uppercase text-sm text-black">
+            <div className="lg:hidden border-t border-white/10 bg-[#0d0d14] px-4 py-4 space-y-3 font-bold font-oswald uppercase text-sm text-white">
               <Link
                 href="/receptionist"
-                className="block w-full text-left py-2 px-3 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200"
+                className="block w-full text-left py-2 px-3 rounded-lg bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/30"
               >
                 📞 VaniEdge Receptionist (For Businesses)
               </Link>
               <Link
                 href="/platform"
-                className="block w-full text-left py-2 px-3 rounded-lg bg-blue-50 text-blue-800 font-bold border border-blue-200"
+                className="block w-full text-left py-2 px-3 rounded-lg bg-blue-500/10 text-blue-400 font-bold border border-blue-500/30"
               >
                 ⚡ VaniEdge Platform (For Developers &amp; Agencies)
               </Link>
               <Link
                 href="/dashboard"
-                className="block w-full text-left py-1 text-black hover:text-emerald-700"
+                className="block w-full text-left py-1 text-gray-300 hover:text-white"
               >
                 Inbound Call Logs &amp; Transcripts
               </Link>
               <button
                 type="button"
                 onClick={() => scrollToSection("studio")}
-                className="block w-full text-left py-1 text-black hover:text-emerald-700"
+                className="block w-full text-left py-1 text-gray-300 hover:text-white"
               >
                 Live Interactive Studio
               </button>
               <button
                 type="button"
-                onClick={() => scrollToSection("cinematic-scrollytelling")}
-                className="block w-full text-left py-1 text-black hover:text-emerald-700 flex items-center gap-1.5"
-              >
-                <span className="h-2 w-2 rounded-full bg-cyan-500 animate-ping" />
-                180ms Telephony Flight
-              </button>
-              <button
-                type="button"
                 onClick={() => scrollToSection("industries")}
-                className="block w-full text-left py-1 text-black hover:text-emerald-700"
+                className="block w-full text-left py-1 text-gray-300 hover:text-white"
               >
                 8 Industry Personas
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("architecture")}
-                className="block w-full text-left py-1 text-black hover:text-emerald-700"
+                className="block w-full text-left py-1 text-gray-300 hover:text-white"
               >
                 Vani + Edge Architecture
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("carrier-chaos-lab")}
-                className="block w-full text-left py-1 text-amber-700 hover:text-amber-900 flex items-center gap-1.5"
+                className="block w-full text-left py-1 text-amber-400 hover:text-amber-300 flex items-center gap-1.5"
               >
-                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
                 3D Carrier &amp; Chaos Lab
               </button>
               <button
                 type="button"
-                onClick={() => scrollToSection("mission-control")}
-                className="block w-full text-left py-1 text-black hover:text-emerald-700"
-              >
-                Audited Call &amp; BridgeView Watchdog
-              </button>
-              <button
-                type="button"
                 onClick={() => scrollToSection("pricing")}
-                className="block w-full text-left py-1 text-black hover:text-emerald-700"
+                className="block w-full text-left py-1 text-gray-300 hover:text-white"
               >
                 Commercial Pricing
               </button>
               <button
                 type="button"
                 onClick={() => scrollToSection("faq")}
-                className="block w-full text-left py-1 text-black hover:text-emerald-700"
+                className="block w-full text-left py-1 text-gray-300 hover:text-white"
               >
                 Frequently Asked Questions
               </button>
-              <div className="pt-2 border-t border-slate-800 space-y-2">
+              <div className="pt-2 border-t border-white/10 space-y-2">
                 {currentUser ? (
                   <button
                     type="button"
@@ -875,7 +896,7 @@ export default function VaniEdgePage() {
                       handleSignOut();
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full py-2.5 rounded-lg bg-slate-800 text-rose-400 font-bold text-center text-xs flex items-center justify-center gap-2"
+                    className="w-full py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold text-center text-xs flex items-center justify-center gap-2"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign Out ({currentUser.name})</span>
@@ -888,7 +909,7 @@ export default function VaniEdgePage() {
                         setMobileMenuOpen(false);
                         handleOpenAuth("signin");
                       }}
-                      className="w-full py-2 rounded-lg bg-slate-800 text-white font-semibold text-center text-xs"
+                      className="w-full py-2 rounded-lg bg-white/5 border border-white/10 text-white font-semibold text-center text-xs"
                     >
                       Sign In
                     </button>
@@ -921,19 +942,84 @@ export default function VaniEdgePage() {
           </div>
 
           {/* 2. Interactive Live Studio Section */}
-          <section id="studio" className="py-16 sm:py-20 border-b border-slate-200 bg-slate-50/70 relative scroll-mt-16">
+          <section id="studio" className="py-16 sm:py-20 border-b border-white/10 bg-[#07070a] relative scroll-mt-16">
             <div className="max-w-6xl mx-auto px-4 sm:px-6">
               <div className="text-center max-w-3xl mx-auto mb-10">
-                <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-slate-100 border border-slate-300 text-black text-xs font-oswald uppercase tracking-wider font-bold mb-3">
-                  <Bot className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/5 border border-white/10 text-emerald-400 text-xs font-oswald uppercase tracking-wider font-bold mb-3">
+                  <Bot className="w-3.5 h-3.5 text-emerald-400" />
                   <span>INTERACTIVE LIVE TELEPHONY STUDIO</span>
                 </div>
-                <h2 className="text-3xl sm:text-5xl font-bold text-black font-oswald uppercase tracking-tight">
+                <h2 className="text-3xl sm:text-5xl font-bold text-white font-oswald uppercase tracking-tight">
                   Experience VaniEdge in Real Time
                 </h2>
-                <p className="mt-3 text-sm sm:text-base text-black font-medium">
+                <p className="mt-3 text-sm sm:text-base text-gray-400 font-medium">
                   Select any of the 8 business categories below, start a browser call or click sample test prompts to observe sub-15ms SutraDB vector retrieval and multi-lingual voice speech generation.
                 </p>
+              </div>
+
+              {/* Real Outbound PSTN Call Dispatcher */}
+              <div className="mb-10 max-w-2xl mx-auto p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#0d0d14] to-cyan-950/40 border border-emerald-500/30 shadow-2xl relative overflow-hidden">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="text-xs font-mono uppercase font-bold text-emerald-400 tracking-wider">
+                    Live Outbound PSTN Telephony Dispatcher
+                  </span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold font-oswald uppercase text-white tracking-tight">
+                  Test VaniEdge on Your Own Physical Phone
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-300 mt-1 mb-4">
+                  Enter your mobile number with country code (e.g. <span className="font-mono text-emerald-400 font-bold">+91 98765 43210</span> or <span className="font-mono text-emerald-400 font-bold">+1 555 123 4567</span>). Our Twilio gateway will ring your physical device in ~3 seconds.
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="relative flex-1">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400" />
+                    <input
+                      type="tel"
+                      value={directPhoneInput}
+                      onChange={(e) => setDirectPhoneInput(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/60 border border-white/20 text-white font-mono text-sm placeholder:text-gray-500 focus:outline-none focus:border-emerald-500 transition-all"
+                      disabled={isDirectCalling}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDispatchDirectCall}
+                    disabled={isDirectCalling}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold font-oswald uppercase text-sm tracking-wide shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isDirectCalling ? (
+                      <>
+                        <span className="h-4 w-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                        <span>Dispatching Call...</span>
+                      </>
+                    ) : (
+                      <>
+                        <PhoneCall className="w-4 h-4" />
+                        <span>Call My Phone Now</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {directCallStatus && (
+                  <div
+                    className={`mt-3 p-3 rounded-xl text-xs font-mono flex items-center gap-2 ${
+                      directCallStatus.type === "success"
+                        ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+                        : "bg-rose-500/10 border border-rose-500/30 text-rose-300"
+                    }`}
+                  >
+                    {directCallStatus.type === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    )}
+                    <span>{directCallStatus.message}</span>
+                  </div>
+                )}
               </div>
 
               <VaniStudioView
@@ -961,39 +1047,36 @@ export default function VaniEdgePage() {
             </div>
           </section>
 
-          {/* Cinematic Scrollytelling Telephony Flight (Zero AI-Slop / Continuous Scrollytelling Engine) */}
-          <CinematicVoiceScrollytelling />
-
           {/* 3. Bento Architecture Grid */}
           <BentoArchitecture />
 
           {/* 3.5. Interactive 3D Carrier Smartphone & Chaos Latency Lab */}
-          <section id="carrier-chaos-lab" className="py-16 sm:py-20 border-b border-slate-200 bg-white relative scroll-mt-16">
+          <section id="carrier-chaos-lab" className="py-16 sm:py-20 border-b border-white/10 bg-[#07070a] relative scroll-mt-16">
             <div className="max-w-6xl mx-auto px-4 sm:px-6">
               <div className="text-center max-w-3xl mx-auto mb-10">
-                <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-slate-100 border border-slate-300 text-black text-xs font-oswald uppercase tracking-wider font-bold mb-3">
-                  <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/5 border border-white/10 text-emerald-400 text-xs font-oswald uppercase tracking-wider font-bold mb-3">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
                   <span>3D HARDWARE SIMULATION &amp; CHAOS RESILIENCE</span>
                 </div>
-                <h2 className="text-3xl sm:text-5xl font-bold text-black font-oswald uppercase tracking-tight">
+                <h2 className="text-3xl sm:text-5xl font-bold text-white font-oswald uppercase tracking-tight">
                   Carrier Forwarding &amp; Chaos Latency Lab
                 </h2>
-                <p className="mt-3 text-sm sm:text-base text-black font-medium">
+                <p className="mt-3 text-sm sm:text-base text-gray-400 font-medium">
                   Test your mobile carrier call forwarding with our real-time 3D smartphone and DTMF synthesis, or inject network latency chaos to observe sub-second failovers across Tier 1 Edge Streaming, Tier 2 Voicemail, and Tier 3 Emergency Triage.
                 </p>
 
                 {/* Tab Switcher */}
-                <div className="mt-6 inline-flex p-1.5 rounded-2xl bg-slate-100 border border-slate-300 shadow-inner">
+                <div className="mt-6 inline-flex p-1.5 rounded-2xl bg-white/5 border border-white/10 shadow-inner">
                   <button
                     type="button"
                     onClick={() => setActiveLabTab("phone")}
                     className={`px-5 py-2.5 rounded-xl font-oswald uppercase font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 ${
                       activeLabTab === "phone"
-                        ? "bg-black text-white shadow-md shadow-black/20"
-                        : "text-slate-700 hover:text-black hover:bg-slate-200"
+                        ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20"
+                        : "text-gray-400 hover:text-white hover:bg-white/5"
                     }`}
                   >
-                    <Phone className="w-4 h-4 text-emerald-400" />
+                    <Phone className="w-4 h-4 text-slate-950" />
                     <span>3D Carrier Phone Simulator</span>
                   </button>
 
@@ -1002,11 +1085,11 @@ export default function VaniEdgePage() {
                     onClick={() => setActiveLabTab("chaos")}
                     className={`px-5 py-2.5 rounded-xl font-oswald uppercase font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 ${
                       activeLabTab === "chaos"
-                        ? "bg-black text-white shadow-md shadow-black/20"
-                        : "text-slate-700 hover:text-black hover:bg-slate-200"
+                        ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20"
+                        : "text-gray-400 hover:text-white hover:bg-white/5"
                     }`}
                   >
-                    <Activity className="w-4 h-4 text-amber-400" />
+                    <Activity className="w-4 h-4 text-slate-950" />
                     <span>Latency Chaos &amp; Failover Lab</span>
                   </button>
                 </div>
@@ -1028,32 +1111,10 @@ export default function VaniEdgePage() {
           {/* 4. 8 Turnkey Industry Solutions */}
           <IndustrySolutionsSection onSelectCategory={(id) => handleSelectPersona(id)} />
 
-          {/* 5. Telephony Failover Mission Control */}
-          <section id="mission-control" className="py-16 sm:py-20 border-b border-slate-200 bg-slate-50/70 scroll-mt-16">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6">
-              <div className="text-center max-w-3xl mx-auto mb-10">
-                <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-slate-100 border border-slate-300 text-black text-xs font-oswald uppercase tracking-wider font-bold mb-3">
-                  <Activity className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>TELEPHONY AUDIT, FAILOVER WATCHDOG &amp; BRIDGEVIEW</span>
-                </div>
-                <h2 className="text-3xl sm:text-5xl font-bold text-black font-oswald uppercase tracking-tight">
-                  Live Mission Control, Audited Call &amp; BridgeView Suite
-                </h2>
-                <p className="mt-3 text-sm sm:text-base text-black font-medium">
-                  Inspect live PSTN carrier health, play the audited inbound call recording with stage-by-stage latency telemetry (385ms TTFT), and manage BridgeView dispatch tickets with verified SHA-checksums.
-                </p>
-              </div>
-
-              <div className="max-w-5xl mx-auto">
-                <TelephonyMissionControl />
-              </div>
-            </div>
-          </section>
-
-          {/* 6. Commercial Pricing Matrix */}
+          {/* 5. Commercial Pricing Matrix */}
           <PricingSection />
 
-          {/* 7. Frequently Asked Questions */}
+          {/* 6. Frequently Asked Questions */}
           <FaqSection />
         </main>
 

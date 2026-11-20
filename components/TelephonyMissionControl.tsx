@@ -216,7 +216,7 @@ export function TelephonyMissionControl({
   const [testTicketPhone, setTestTicketPhone] = useState<string>("+91-99887-66554");
   const [testTicketService, setTestTicketService] = useState<string>("Emergency Pediatric Consultation");
 
-  const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch telemetry & tickets
   useEffect(() => {
@@ -248,9 +248,11 @@ export function TelephonyMissionControl({
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-scroll terminal logs
+  // Auto-scroll terminal logs container (never the page window)
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
   }, [simulationLogs]);
 
   // Execute interactive 1,500ms timeout watchdog failover simulation
@@ -696,7 +698,7 @@ export function TelephonyMissionControl({
               <span className="text-slate-600 font-mono">Real-time STDOUT</span>
             </div>
 
-            <div className="h-28 overflow-y-auto bg-slate-900 p-3.5 rounded-xl border-2 border-slate-300 font-mono text-[11px] text-slate-200 space-y-1">
+            <div ref={logsContainerRef} className="h-28 overflow-y-auto bg-slate-900 p-3.5 rounded-xl border-2 border-slate-300 font-mono text-[11px] text-slate-200 space-y-1">
               {simulationLogs.map((log, idx) => (
                 <div
                   key={idx}
@@ -713,7 +715,6 @@ export function TelephonyMissionControl({
                   {log}
                 </div>
               ))}
-              <div ref={logsEndRef} />
             </div>
           </div>
         </div>

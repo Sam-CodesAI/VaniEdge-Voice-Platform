@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   Sparkles,
   ArrowRight,
-  PhoneCall,
   CheckCircle2,
   Building2,
   UtensilsCrossed,
@@ -14,6 +14,7 @@ import {
   CreditCard,
   Hotel,
   Headphones,
+  PhoneCall,
 } from "lucide-react";
 import { AVAILABLE_CATEGORIES, BusinessCategory } from "./VaniStudioView";
 
@@ -37,7 +38,7 @@ export default function IndustrySolutionsSection({
     }
   > = {
     clinic: {
-      iconComp: <Building2 className="w-5 h-5 text-emerald-700" />,
+      iconComp: <Building2 className="w-5 h-5 text-emerald-400" />,
       headline: "Healthcare Triage & Patient Slot Scheduling",
       capabilities: [
         "Patient symptom intake & urgency triage",
@@ -48,105 +49,105 @@ export default function IndustrySolutionsSection({
       roiMetric: "82% reduction in clinic receptionist overhead",
       sampleDialogue: {
         user: "Doctor, can I get an appointment with the pediatrician for tomorrow at 11am?",
-        agent: "Namaste! Dr. Sharma's clinic has confirmed your pediatric consultation for tomorrow at 11:00 AM. A confirmation ticket has been dispatched to your mobile.",
+        agent: "Namaste! Dr. Sharma has open slots tomorrow at 11:00 AM or 12:30 PM. Shall I confirm 11:00 AM for you? I will also send an instant SMS confirmation.",
       },
     },
     restaurant: {
-      iconComp: <UtensilsCrossed className="w-5 h-5 text-amber-700" />,
-      headline: "Cloud Kitchen Ordering & Table Reservations",
+      iconComp: <UtensilsCrossed className="w-5 h-5 text-amber-400" />,
+      headline: "Dining Reservations & Takeaway Orders",
       capabilities: [
-        "Instant takeaway order intake (Special Thali, Biryani, Dosa)",
-        "Delivery address confirmation with 4km free-delivery validation",
-        "Table reservation holds and peak-hour party booking",
-        "Real-time kitchen order ticket dispatch directly to chef terminals",
+        "Table reservations with party size & indoor/outdoor seating choices",
+        "Direct menu item order intake with live item stock verification",
+        "Delivery address & landmark extraction with phonetic street parsing",
+        "Instant WhatsApp/SMS order tracking link dispatch",
       ],
-      roiMetric: "35% increase in dinner phone order fulfillment",
+      roiMetric: "100% elimination of missed orders during busy dinner rushes",
       sampleDialogue: {
-        user: "I'd like to order 2 Special North Indian Thalis to Indiranagar.",
-        agent: "Namaste! Your order for 2 Special Thalis (₹280) is confirmed with free delivery. Our kitchen has begun preparation and delivery will arrive in 30 minutes.",
+        user: "I want to reserve a table for 4 people tonight around 8pm.",
+        agent: "We would love to host you! We have an indoor table for 4 at 8:00 PM tonight at Royal Feast Bistro. May I have your name to confirm?",
       },
     },
     auto: {
-      iconComp: <Truck className="w-5 h-5 text-rose-700" />,
-      headline: "24/7 Roadside Emergency & Flatbed Tow Dispatch",
+      iconComp: <Truck className="w-5 h-5 text-cyan-400" />,
+      headline: "24/7 Roadside Rescue & Service Dispatch",
       capabilities: [
-        "Instant GPS mile marker & breakdown location logging",
-        "High-priority escalation for highway breakdowns & engine stalls",
-        "Transparent upfront pricing (tyre change ₹400, jumpstart ₹350, tow ₹1500)",
-        "Real-time recovery crew vehicle dispatch with 18-minute SLA",
+        "Immediate emergency triage for highway breakdowns and flat tires",
+        "Accurate highway milestone, GPS & landmark caller extraction",
+        "Automatic SMS tracking link with tow truck driver live telemetry",
+        "Transparent upfront pricing without roadside price gouging",
       ],
-      roiMetric: "Sub-20s dispatch response vs 10m call wait",
+      roiMetric: "<45s dispatch initiation from phone pickup to driver assignment",
       sampleDialogue: {
-        user: "My car broke down on Highway 44 with a flat tyre, I need help immediately!",
-        agent: "Emergency assistance activated! Our recovery vehicle has been dispatched to your Highway 44 location with an estimated arrival time of 18 minutes. Please stay safe inside the vehicle.",
+        user: "My car engine stopped on the highway near the airport toll!",
+        agent: "Stay safe inside the vehicle. I am dispatching our nearest flatbed tow truck to your location right now. ETA is 14 minutes.",
       },
     },
     retail: {
-      iconComp: <ShoppingBag className="w-5 h-5 text-cyan-700" />,
-      headline: "Order Tracking, 30-Day Returns & Inventory Inquiries",
+      iconComp: <ShoppingBag className="w-5 h-5 text-purple-400" />,
+      headline: "Store Inventory, Curbside Pickup & Inquiries",
       capabilities: [
-        "Instant tracking lookup for shipping and delivery estimates",
-        "30-day return policy validation and refund slip generation",
-        "Real-time in-store stock availability across sizes and colors",
-        "Automated warranty claim verification with invoice proof",
+        "Real-time inventory lookup across retail SKU catalogs",
+        "Order status checks with tracking numbers and ETA updates",
+        "Return policy guidelines & store operating hours answering",
+        "Curbside pickup coordination when customers pull into parking",
       ],
-      roiMetric: "90% resolution of Tier-1 post-purchase inquiries",
+      roiMetric: "65% deflection of repetitive order status inquiries",
       sampleDialogue: {
-        user: "Can I return an unworn jacket I ordered last week?",
-        agent: "Hello! PrimeGoods offers hassle-free 30-day returns on all unworn items. I have initiated your return authorization slip and sent return label details to your phone.",
+        user: "Do you have the organic almond butter in stock at your Indiranagar store?",
+        agent: "Yes, we currently have 8 jars of organic almond butter in stock at Indiranagar. Would you like me to hold one for curbside pickup?",
       },
     },
     realestate: {
-      iconComp: <Home className="w-5 h-5 text-indigo-700" />,
-      headline: "Apartment Viewings, Leasing Inquiries & Maintenance",
+      iconComp: <Home className="w-5 h-5 text-blue-400" />,
+      headline: "Property Viewing Tours & Tenant Pre-Screening",
       capabilities: [
-        "Automated appointment booking for 2BHK/3BHK property walkthroughs",
+        "Automated site visit scheduling for residential & commercial units",
+        "Pre-screening buyer budget, preferred move-in dates & unit types",
         "Instant rental pricing, security deposit, and floor-plan SMS delivery",
-        "Tenant maintenance log dispatch (urgent plumbing/electrical)",
-        "Pre-screening buyer budget and preferred move-in dates",
+        "Warm transfer to assigned listing agent for high-intent buyers",
       ],
-      roiMetric: "4x increase in weekend site visit bookings",
+      roiMetric: "3.4x higher viewing tour conversion rates",
       sampleDialogue: {
-        user: "Are 3BHK flats available for lease this weekend in Koramangala?",
-        agent: "Yes, Skyline Realty has 2 premium 3BHK flats open for viewing this Saturday. Would you prefer a 10:00 AM or 3:00 PM private tour slot?",
+        user: "Is the 3BHK penthouse at Prestige Heights still available for a visit this weekend?",
+        agent: "Yes, the 3BHK penthouse is available. I can schedule a private guided walkthrough on Saturday at 11:30 AM or 3:00 PM. Which works best?",
       },
     },
     finance: {
-      iconComp: <CreditCard className="w-5 h-5 text-emerald-700" />,
-      headline: "Account Balances, Loan Status & Lost Card Freezing",
+      iconComp: <CreditCard className="w-5 h-5 text-emerald-400" />,
+      headline: "Branch Appointments & Loan Inquiry Screening",
       capabilities: [
-        "Emergency instant card-freeze via two-factor voice challenge",
-        "Home/Auto loan application status check with lead CRM update",
-        "Branch operating hours, IFSC codes, and appointment scheduling",
-        "Cryptographic compliance recording with zero PII retention",
+        "Personal loan, home mortgage, and credit card inquiry qualification",
+        "Branch visit scheduling with specialist wealth advisors",
+        "Document checklist dispatch via encrypted SMS",
+        "Strict adherence to financial privacy regulations and PII protection",
       ],
-      roiMetric: "100% elimination of lost-card panic hold times",
+      roiMetric: "40% faster loan pre-qualification pipeline",
       sampleDialogue: {
-        user: "I lost my debit card, please help me freeze it right away!",
-        agent: "Card security protocol initiated immediately. A one-time security OTP has been sent to your registered mobile. Once verified, your card will be instantly locked.",
+        user: "What are the required documents for applying for a new business expansion loan?",
+        agent: "For a business loan, you will need 2 years of audited ITRs, 6 months bank statements, and GST returns. I have sent the checklist to your phone.",
       },
     },
     hospitality: {
-      iconComp: <Hotel className="w-5 h-5 text-amber-700" />,
-      headline: "Suite Reservations, Check-in Concierge & Transfers",
+      iconComp: <Hotel className="w-5 h-5 text-rose-400" />,
+      headline: "Room Reservations, Amenities & Concierge",
       capabilities: [
-        "Direct reservation intake with room upgrade recommendations",
-        "Airport pick-up/drop shuttle scheduling with driver SMS link",
-        "Late check-in coordination and complimentary breakfast logs",
-        "Local tourist attraction guidance and curated dining bookings",
+        "Direct hotel room booking with date & occupancy selection",
+        "Airport shuttle transfer coordination and baggage inquiries",
+        "Room service order taking and spa appointment reservations",
+        "Automated booking confirmation with reservation PIN via SMS",
       ],
-      roiMetric: "28% higher direct booking conversion vs OTAs",
+      roiMetric: "18% increase in direct commission-free telephone bookings",
       sampleDialogue: {
-        user: "Do you have a deluxe king suite available for tonight?",
-        agent: "Welcome to Grand Horizon Suites! We have 1 Deluxe King Suite available for tonight with complimentary breakfast and free airport shuttle included.",
+        user: "Do you have a suite available with sea view for this coming Friday night?",
+        agent: "We have our Deluxe Sea View Suite available for Friday night. It includes complimentary breakfast and airport pickup. Would you like to reserve it?",
       },
     },
     general: {
-      iconComp: <Headphones className="w-5 h-5 text-cyan-700" />,
-      headline: "24/7 Sovereign Reception & Urgent Callback Routing",
+      iconComp: <Headphones className="w-5 h-5 text-indigo-400" />,
+      headline: "Enterprise Front Desk & Reception Concierge",
       capabilities: [
-        "Always-on inbound phone coverage eliminating missed business leads",
-        "Department-specific call routing and executive voicemail triage",
+        "Smart department routing with phonetic employee name resolution",
+        "After-hours voicemail transcription with priority Telegram alerts",
         "Automated CRM ticket logging with audio snippet attachments",
         "Multi-lingual operator support for pan-regional customer bases",
       ],
@@ -161,19 +162,19 @@ export default function IndustrySolutionsSection({
   const activeData = categoryDetails[activeTab];
 
   return (
-    <section id="industries" className="py-16 sm:py-24 border-b border-slate-200 bg-slate-50/50 relative">
+    <section id="industries" className="py-20 sm:py-28 border-t border-b border-white/10 bg-[#07070a] text-white relative font-sans">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        {/* Section Header in Oswald & Black Text */}
-        <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-100 border border-slate-300 text-black text-xs font-oswald uppercase tracking-wider font-bold mb-3">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+        {/* Section Header */}
+        <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.03] border border-white/10 text-emerald-400 text-xs font-oswald uppercase tracking-wider font-bold mb-4">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
             <span>TURNKEY VERTICAL RECEPTIONISTS</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-bold text-black font-oswald uppercase tracking-tight">
+          <h2 className="text-3xl sm:text-5xl font-bold text-white font-oswald uppercase tracking-tight">
             Tailored Voice AI for Every Industry
           </h2>
-          <p className="mt-3 text-base sm:text-lg text-black font-medium">
-            Pre-trained on industry vocabulary, specialized workflows, and localized regional compliance rules.
+          <p className="mt-3 text-sm sm:text-base text-gray-400 font-normal max-w-2xl mx-auto leading-relaxed">
+            Pre-trained on industry vocabulary, specialized appointment workflows, and localized regional compliance rules.
           </p>
         </div>
 
@@ -186,18 +187,18 @@ export default function IndustrySolutionsSection({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveTab(cat.id)}
-                className={`p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center gap-3 ${
+                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
                   isSelected
-                    ? "bg-white text-black border-emerald-600 shadow-md ring-1 ring-emerald-600"
-                    : "bg-white text-black border-slate-200 hover:border-slate-400 hover:bg-slate-50 shadow-sm"
+                    ? "bg-emerald-500/15 text-white border-emerald-500/60 shadow-[0_0_20px_rgba(52,211,153,0.15)] ring-1 ring-emerald-500/40"
+                    : "bg-white/[0.02] text-gray-300 border-white/10 hover:border-white/20 hover:bg-white/[0.04]"
                 }`}
               >
                 <span className="text-2xl shrink-0">{cat.icon}</span>
                 <div className="flex flex-col min-w-0">
-                  <span className="truncate font-bold text-black text-xs font-oswald uppercase">
+                  <span className="truncate font-bold text-white text-xs font-oswald uppercase">
                     {cat.label}
                   </span>
-                  <span className="text-[11px] text-slate-700 truncate font-normal">
+                  <span className="text-[11px] text-gray-400 truncate font-normal">
                     {cat.shortDesc}
                   </span>
                 </div>
@@ -207,19 +208,19 @@ export default function IndustrySolutionsSection({
         </div>
 
         {/* Active Industry Deep-Dive Card */}
-        <div className="rounded-2xl bg-white border-2 border-slate-200 p-6 sm:p-10 shadow-lg">
+        <div className="rounded-2xl bg-[#0c0c14] border border-white/10 p-6 sm:p-10 shadow-2xl">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             {/* Left Info Column */}
             <div className="lg:col-span-7 space-y-5">
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-slate-100 border border-slate-200">
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
                   {activeData.iconComp}
                 </div>
                 <div>
-                  <span className="text-xs font-oswald uppercase text-emerald-800 tracking-wider font-bold block">
+                  <span className="text-xs font-mono uppercase text-emerald-400 tracking-wider font-bold block">
                     Turnkey Industry Agent
                   </span>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-black font-oswald uppercase">
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white font-oswald uppercase">
                     {activeData.headline}
                   </h3>
                 </div>
@@ -227,59 +228,55 @@ export default function IndustrySolutionsSection({
 
               <div className="space-y-2.5 pt-2">
                 {activeData.capabilities.map((cap, idx) => (
-                  <div key={idx} className="flex items-start gap-2.5 text-sm text-black font-medium">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div key={idx} className="flex items-start gap-2.5 text-sm text-gray-300 font-normal">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                     <span>{cap}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="pt-3 flex flex-wrap items-center gap-4">
-                <div className="px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-300 text-black text-xs font-mono font-bold">
+              <div className="pt-4 flex flex-wrap items-center gap-4">
+                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-emerald-300 text-xs font-mono">
                   📈 Business Impact: {activeData.roiMetric}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectCategory(activeTab);
-                    const el = document.getElementById("studio");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="px-5 py-2.5 rounded-lg bg-black hover:bg-slate-800 text-white text-xs font-bold font-oswald uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                <Link
+                  href="/receptionist/onboarding"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-oswald uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/30"
                 >
-                  <span>Test in Live Studio</span>
+                  <PhoneCall className="w-4 h-4" />
+                  <span>Launch {activeTab.toUpperCase()} Receptionist</span>
                   <ArrowRight className="w-4 h-4" />
-                </button>
+                </Link>
               </div>
             </div>
 
             {/* Right Dialogue Preview Mockup */}
-            <div className="lg:col-span-5 bg-slate-50 border-2 border-slate-200 rounded-xl p-5 space-y-3 font-sans shadow-sm">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200 text-xs text-black font-mono font-bold">
-                <span className="flex items-center gap-1.5 text-emerald-800 font-bold">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <div className="lg:col-span-5 bg-black/50 border border-white/10 rounded-2xl p-5 space-y-3 font-sans shadow-inner">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10 text-xs font-mono">
+                <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                   Live Call Audio Preview
                 </span>
-                <span className="text-black">Latency: 11.2ms</span>
+                <span className="text-gray-400">Latency: 3.8ms</span>
               </div>
 
               <div className="space-y-3 pt-1">
                 {/* Caller Message */}
                 <div className="flex items-start gap-2 text-xs">
-                  <div className="h-6 w-6 rounded-full bg-slate-200 text-black flex items-center justify-center font-bold font-oswald text-[10px] shrink-0 mt-0.5">
+                  <div className="h-6 w-6 rounded-full bg-white/10 text-gray-300 flex items-center justify-center font-bold font-oswald text-[10px] shrink-0 mt-0.5">
                     Caller
                   </div>
-                  <div className="p-3 rounded-xl bg-white border border-slate-200 text-black leading-relaxed flex-1 font-medium shadow-sm">
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-gray-200 leading-relaxed flex-1 font-normal">
                     "{activeData.sampleDialogue.user}"
                   </div>
                 </div>
 
                 {/* VaniEdge Agent Message */}
                 <div className="flex items-start gap-2 text-xs">
-                  <div className="h-6 w-6 rounded-full bg-black text-white flex items-center justify-center font-bold font-oswald text-[10px] shrink-0 mt-0.5">
+                  <div className="h-6 w-6 rounded-full bg-emerald-500 text-black flex items-center justify-center font-bold font-oswald text-[10px] shrink-0 mt-0.5">
                     Vani
                   </div>
-                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-black leading-relaxed flex-1 font-medium shadow-sm">
+                  <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-200 leading-relaxed flex-1 font-normal">
                     "{activeData.sampleDialogue.agent}"
                   </div>
                 </div>

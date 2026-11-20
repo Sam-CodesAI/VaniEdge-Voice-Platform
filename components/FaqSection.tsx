@@ -13,7 +13,7 @@ export default function FaqSection() {
 
   const faqs: FaqItem[] = [
     {
-      question: "What makes VaniEdge Voice Platform fundamentally different from standard cloud voice bots?",
+      question: "What makes VaniEdge fundamentally different from standard cloud voice bots?",
       answer:
         "Standard cloud voice bots bounce your customer's audio through multiple centralized US data centers, adding 2.5 to 5+ seconds of latency and frequently dropping calls when an LLM or speech API rate-limits. VaniEdge runs on distributed edge workers, streams raw audio directly via WebSocket carrier interconnects, and operates an atomic sub-1,200ms failover watchdog that guarantees 100% call continuity with zero dropped calls.",
     },
@@ -28,45 +28,35 @@ export default function FaqSection() {
         "VaniEdge natively supports English, Hindi (हिंदी), Kannada (ಕನ್ನಡ), Marathi (मराठी), Tamil (தமிழ்), and Spanish (Español). The engine automatically parses mixed colloquial queries (e.g. Hinglish or Kannada-English), understands localized phonetic names, and synthesizes natural regional voice responses tailored to your local geography.",
     },
     {
-      question: "Can we keep our existing business phone number?",
+      question: "Can we keep our existing business phone number without porting?",
       answer:
-        "Yes! You can either use our dedicated enterprise phone number directly or set up simple call forwarding from your existing carrier (Jio, Airtel, Vodafone, AT&T, Verizon) to your dedicated VaniEdge line. No hardware changes or new SIM cards are required.",
+        "Yes! You keep your existing mobile number and SIM card. Using native telecom conditional forwarding (*409* for Jio, *71* for Airtel, *67* for Vi/BSNL), your carrier redirects callers to your AI Receptionist only when you're busy or on another call. No carrier porting, no hardware changes, and no paperwork required.",
     },
     {
       question: "What is SutraDB and why does it eliminate vector cloud bills?",
       answer:
-        "SutraDB is our custom ultra-lightweight hybrid vector engine built specifically for edge runtimes. It executes Reciprocal Rank Fusion combining 60% Dense Semantic Vector embeddings with 40% BM25 Lexical text matching in under 12ms with zero external cloud dependencies. This eliminates $70+/month SaaS bills for Pinecone or Weaviate while delivering faster responses.",
+        "SutraDB is our custom ultra-lightweight hybrid vector engine built specifically for edge runtimes. It executes Reciprocal Rank Fusion combining 60% Dense Semantic Vector embeddings with 40% BM25 Lexical text matching in under 5ms with zero external cloud dependencies. This eliminates $70+/month SaaS bills for Pinecone or Weaviate while delivering faster responses.",
     },
     {
-      question: "What is BridgeView and how does it handle client leads and SMS dispatch?",
+      question: "How long does it take to deploy VaniEdge Receptionist?",
       answer:
-        "BridgeView is the integrated client operations portal for business owners and receptionists. Every inbound customer call is automatically parsed for caller name, contact details, requested service, and triage urgency. The system immediately issues a cryptographically verified booking ticket (e.g. VANI-CLI-4A9B with 8-character SHA-checksum) and dispatches localized SMS confirmations to both the customer and on-duty staff.",
-    },
-    {
-      question: "How do you achieve 385ms voice latency and can I audit the stage-by-stage benchmarks?",
-      answer:
-        "By terminating Twilio carrier media streams directly on distributed edge workers, eliminating intermediate cloud relays, and querying SutraDB in under 10ms, our time-to-first-audio-byte (TTFT) clocks in at ~385ms. You can inspect the real recorded call in our Live Mission Control studio, which breaks down every stage: 18ms webhook validation, 42ms WebSocket upgrade, 92ms ElevenLabs session, 9.8ms SutraDB lookup, and 385ms first voice frame.",
-    },
-    {
-      question: "How fast can my business go live with a custom answering agent?",
-      answer:
-        "You can be fully live in under 24 hours. We ingest your business services, FAQs, hours, and pricing into SutraDB, assign your dedicated local phone line, configure the SMS dispatch templates, and run test verification before handing over the line.",
+        "You can be fully live in under 60 seconds with our setup wizard. Simply enter your business name, verify your services and hours, choose your voice persona, and dial your carrier's forwarding code. The AI immediately starts answering your incoming business calls.",
     },
   ];
 
   return (
-    <section id="faq" className="py-16 sm:py-24 border-b border-slate-200 bg-white relative">
+    <section id="faq" className="py-20 sm:py-28 border-t border-b border-white/10 bg-[#07070a] text-white relative font-sans">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-12 sm:mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-100 border border-slate-300 text-black text-xs font-oswald uppercase tracking-wider font-bold mb-3">
-            <HelpCircle className="w-3.5 h-3.5 text-emerald-600" />
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.03] border border-white/10 text-emerald-400 text-xs font-oswald uppercase tracking-wider font-bold mb-4">
+            <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
             <span>FREQUENTLY ASKED QUESTIONS</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-bold text-black font-oswald uppercase tracking-tight">
+          <h2 className="text-3xl sm:text-5xl font-bold text-white font-oswald uppercase tracking-tight">
             Everything You Need to Know
           </h2>
-          <p className="mt-3 text-base sm:text-lg text-black font-medium">
-            Got questions about edge failover, regional languages, or deployment? We've got answers.
+          <p className="mt-3 text-sm sm:text-base text-gray-400 font-normal leading-relaxed">
+            Got questions about carrier forwarding, edge failover, or language models? We've got answers.
           </p>
         </div>
 
@@ -76,23 +66,23 @@ export default function FaqSection() {
             return (
               <div
                 key={idx}
-                className="rounded-xl bg-slate-50 border-2 border-slate-200 overflow-hidden transition-all shadow-sm"
+                className="rounded-xl bg-white/[0.02] border border-white/10 hover:border-white/20 overflow-hidden transition-all shadow-sm"
               >
                 <button
                   type="button"
                   onClick={() => setOpenIndex(isOpen ? null : idx)}
-                  className="w-full p-5 text-left flex items-center justify-between gap-4 font-bold text-base sm:text-lg text-black font-oswald uppercase tracking-wide hover:text-emerald-700 transition-colors cursor-pointer"
+                  className="w-full p-5 text-left flex items-center justify-between gap-4 font-bold text-base sm:text-lg text-white font-oswald uppercase tracking-wide hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   <span>{faq.question}</span>
                   <ChevronDown
-                    className={`w-5 h-5 text-black shrink-0 transition-transform duration-200 ${
-                      isOpen ? "rotate-180 text-emerald-600" : ""
+                    className={`w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${
+                      isOpen ? "rotate-180 text-emerald-400" : ""
                     }`}
                   />
                 </button>
 
                 {isOpen && (
-                  <div className="px-5 pb-5 text-sm text-black leading-relaxed border-t border-slate-200 pt-3.5 font-medium">
+                  <div className="px-5 pb-5 text-sm text-gray-300 leading-relaxed border-t border-white/5 pt-3.5 font-normal">
                     {faq.answer}
                   </div>
                 )}
