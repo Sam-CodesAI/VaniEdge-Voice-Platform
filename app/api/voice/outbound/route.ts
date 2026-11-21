@@ -3,19 +3,70 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
+// Strict E.164 Phone Format: + followed by 8 to 15 digits
+const E164_REGEX = /^\+[1-9]\d{7,14}$/;
+
+// Fraud & Toll-Abuse Blocklist (Premium rate numbers, satellite, high-risk tele-fraud prefixes)
+const BLOCKED_FRAUD_PREFIXES = [
+  "+1900", // US Premium Rate
+  "+1976", // US 976 Premium Rate
+  "+881",  // Global Mobile Satellite System
+  "+882",  // International Networks
+  "+883",  // International Networks
+];
+
+function isBlockedPrefix(phone: string): boolean {
+  return BLOCKED_FRAUD_PREFIXES.some((prefix) => phone.startsWith(prefix));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const clientIp = getClientIp(req);
     const rateCheck = checkRateLimit(clientIp, "voice_outbound_call", 5, 60 * 1000);
     if (!rateCheck.success) {
       return NextResponse.json(
-        { error: "Too many call requests. Please wait a minute before requesting another callback." },
+        {
+          type: "https://vaniedge.ai/errors/rate-limit-exceeded",
+          title: "Too Many Requests",
+          status: 429,
+          detail: "Too many call requests. Please wait a minute before requesting another callback.",
+          instance: req.nextUrl.pathname,
+        },
         { status: 429 }
       );
     }
 
     const body = (await req.json()) as { to?: string };
-    const to = body.to?.trim() || "+916361209256";
+    const rawTo = body.to ? body.to.trim().replace(/[\s\-\(\)]/g, "") : "+916361209256";
+    const to = rawTo;
+
+    // 1. Validate strict E.164 formatting
+    if (!E164_REGEX.test(to)) {
+      return NextResponse.json(
+        {
+          type: "https://vaniedge.ai/errors/invalid-phone-format",
+          title: "Invalid Phone Number Format",
+          status: 400,
+          detail: "Destination phone number must be in valid international E.164 format (e.g. +916361209256 or +15551234567).",
+          instance: req.nextUrl.pathname,
+        },
+        { status: 400 }
+      );
+    }
+
+    // 2. Guard against toll fraud & premium rate exploitation
+    if (isBlockedPrefix(to)) {
+      return NextResponse.json(
+        {
+          type: "https://vaniedge.ai/errors/restricted-destination",
+          title: "Restricted Destination Number",
+          status: 403,
+          detail: "Calls to premium-rate, satellite, or high-cost destinations are restricted.",
+          instance: req.nextUrl.pathname,
+        },
+        { status: 403 }
+      );
+    }
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -24,7 +75,13 @@ export async function POST(req: NextRequest) {
 
     if (!accountSid || !authToken) {
       return NextResponse.json(
-        { error: "Twilio credentials are not configured on the server." },
+        {
+          type: "https://vaniedge.ai/errors/unconfigured-telephony",
+          title: "Telephony Gateway Unconfigured",
+          status: 500,
+          detail: "Twilio credentials are not configured on the server.",
+          instance: req.nextUrl.pathname,
+        },
         { status: 500 }
       );
     }
@@ -58,8 +115,12 @@ export async function POST(req: NextRequest) {
     if (!twilioRes.ok) {
       return NextResponse.json(
         {
-          error: twilioData.message || "Failed to trigger outbound call via Twilio.",
+          type: "https://vaniedge.ai/errors/telephony-provider-error",
+          title: "Twilio Telephony Dispatch Failed",
+          status: twilioRes.status,
+          detail: twilioData.message || "Failed to trigger outbound call via Twilio.",
           code: twilioData.code,
+          instance: req.nextUrl.pathname,
         },
         { status: twilioRes.status }
       );
@@ -75,6 +136,15 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: errorMsg }, { status: 500 });
+    return NextResponse.json(
+      {
+        type: "https://vaniedge.ai/errors/internal-error",
+        title: "Internal Telephony Server Error",
+        status: 500,
+        detail: errorMsg,
+        instance: req.nextUrl.pathname,
+      },
+      { status: 500 }
+    );
   }
 }

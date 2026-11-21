@@ -181,3 +181,18 @@ export async function requireAuth(
     },
   };
 }
+
+/**
+ * Safely extracts user identity if valid credentials are provided,
+ * but returns null without blocking if unauthenticated.
+ */
+export async function getOptionalAuth(
+  req: Request | NextRequest
+): Promise<AuthContext | null> {
+  try {
+    const res = await requireAuth(req, { checkCsrf: false });
+    return res.auth || null;
+  } catch {
+    return null;
+  }
+}
