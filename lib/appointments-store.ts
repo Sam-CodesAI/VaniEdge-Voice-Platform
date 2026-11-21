@@ -146,7 +146,23 @@ export class AppointmentsStore {
 
     if (isSupabaseConfigured) {
       try {
-        await supabase.from("appointments").insert([record]);
+        await supabase.from("appointments").insert([
+          {
+            id: record.id,
+            tenant_id: record.tenantId,
+            caller_name: record.callerName,
+            caller_phone: record.callerPhone,
+            service_type: record.serviceType,
+            scheduled_time: record.scheduledTime,
+            duration_minutes: record.durationMinutes || 30,
+            notes: record.notes || "",
+            status: record.status,
+            source: record.source,
+            call_sid: record.callSid || null,
+            created_at: record.createdAt,
+            updated_at: record.updatedAt,
+          },
+        ]);
       } catch (err) {
         console.warn("[AppointmentsStore] Supabase insert fallback:", err);
       }
