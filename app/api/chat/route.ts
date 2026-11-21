@@ -357,6 +357,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       voiceResponse,
+      reply: voiceResponse,
       intent: detectedIntent,
       requestState,
       isSimulated: isDemo,
